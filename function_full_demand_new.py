@@ -16,26 +16,53 @@ import data
 T = 24   # number of time periods
 temps = range(T)  # time periods
 
-# Downscaling factor for demand curve
-scale = 10.06
+# Load demand curves
+D = len(data.LOADS)
 
-# Load demand curves (or generate random if missing)
-demand_price_winter = pd.DataFrame(np.sort(np.random.rand(10, 24))[::-1])
-demand_volume_winter = pd.DataFrame(np.random.rand(10, 24)) / scale
-demand_price_summer = pd.DataFrame(np.sort(np.random.rand(10, 24))[::-1])
-demand_volume_summer = pd.DataFrame(np.random.rand(10, 24)) / scale
+# Demand_price = pd.DataFrame({d: [round(data.load_bids[d],2)] * T for d in data.LOADS}).T
+Demand_price_array = np.sort(np.random.rand(D))[::-1] * data.load_cost
+Demand_price = pd.DataFrame({d: [round(Demand_price_array[d],2)] * T for d in range(D)}).T
+Demand_price.columns = range(T)
+Demand_price.index = data.LOADS
 
-D_winter = demand_price_winter.shape[0]
-D_summer = demand_price_summer.shape[0]
+Demand_volume = pd.DataFrame({d: [round(data.load_profile[d,t],2) for t in data.TIMES] for d in data.LOADS}).T
+Demand_volume_cumulative = Demand_volume.cumsum(axis=0)
+Demand_volume = Demand_volume_cumulative
 
-max_dem_winter = demand_volume_winter.iloc[D_winter-1, :].values
-min_dem_winter = demand_volume_winter.iloc[0, :].values
-max_dem_summer = demand_volume_summer.iloc[D_summer-1, :].values
-min_dem_summer = demand_volume_summer.iloc[0, :].values
+Demand_volume_total = Demand_volume.iloc[D-1, :].values
 
-# Load RES profiles (or use random)
-RES_summer = np.random.rand(T)
-RES_winter = np.random.rand(T)
+max_dem = data.load_capacity
+min_dem = 0
+
+# Plot
+plt.figure(figsize=(15,8))
+plt.subplot(2,2,1)
+for t in temps:
+    plt.step(
+        pd.concat([pd.Series([0], index=["BEG"]), Demand_volume.iloc[:,t], pd.Series([Demand_volume.iloc[-1,t]], index=["END"])]), 
+        pd.concat([pd.Series([Demand_price.iloc[0,t]], index=["BEG"]), Demand_price.iloc[:,t], pd.Series([0], index=["END"])]), 
+        label=f"Hour {t+1}")
+plt.xlabel("Volume (MWh)")
+plt.ylabel("Price (€/MWh)")
+plt.title("Load Demand Curve")
+# plt.legend()
+
+plt.subplot(2,2,2)
+plt.plot(Demand_volume_total, color="red")
+plt.xlabel("Hour (h)")
+plt.ylabel("Cumulated demand (MWh)")
+plt.title("Demand Over Time")
+
+# Load RES profile
+RES = np.array([data.generator_availability['W3'][t] * max_dem for t in range(1,T+1)])
+
+plt.subplot(2,2,3)
+plt.plot(RES, color="green")
+plt.plot(Demand_volume_total, color='red', linestyle='--', linewidth=0.8, label="Total Demand")
+plt.xlabel("Hour (h)")
+plt.ylabel("Power (MW)")
+plt.title("Renewable Production Over Time")
+plt.legend()
 
 # Battery/Storage parameters
 alpha_batt = 0.5
@@ -53,79 +80,35 @@ Eta_all = np.zeros(n_players)
 min_eta = 0.85
 
 # Summer storage needs
-Residual_summer = -RES_summer + demand_volume_summer.iloc[D_summer-1, :].values
-Residual_corrected_summer = np.where(Residual_summer > 0, Residual_summer / min_eta, Residual_summer)
-Cummul_res_corr_summer = np.cumsum(Residual_corrected_summer)
-Local_cumul_summer = Cummul_res_corr_summer - np.minimum.accumulate(Cummul_res_corr_summer)
-Stor_req_summer = np.max(Local_cumul_summer)
+Residual = -RES + Demand_volume_total
+Residual_corrected = np.where(Residual > 0, Residual / min_eta, Residual)
+Cummul_res_corr = np.cumsum(Residual_corrected)
+Local_cumul = Cummul_res_corr - np.minimum.accumulate(Cummul_res_corr)
+Stor_req = np.max(Local_cumul)
+Stor_req = int(np.floor(Stor_req))
 
-# Winter storage needs
-Residual_winter = -RES_winter + max_dem_winter
-Residual_corrected_winter = np.where(Residual_winter > 0, Residual_winter / min_eta, Residual_winter)
-Cummul_res_corr_winter = np.cumsum(Residual_corrected_winter)
-Local_cumul_winter = Cummul_res_corr_winter - np.minimum.accumulate(Cummul_res_corr_winter)
-Stor_req_winter = np.max(Local_cumul_winter)
-
-Stor_req = int(np.floor(max(Stor_req_summer, Stor_req_winter)))
-
-Capa_req_summer = np.max(Residual_corrected_summer)
-Capa_req_winter = np.max(Residual_corrected_winter)
-Capa_req = int(np.floor(max(Capa_req_summer, Capa_req_winter)))
+Capa_req = np.max(Residual_corrected)
+Capa_req = int(np.floor(Capa_req))
 
 # Plot
-plt.figure()
-plt.plot(Cummul_res_corr_winter)
+plt.subplot(2,2,4)
+plt.plot(Residual_corrected, color="red")
 plt.xlabel("Time (h)")
-plt.ylabel("Cumulated residual corrected demand (MWh)")
-plt.savefig("cr_plot.png")
-plt.close()
+plt.ylabel("Cumulated residual demand (MWh)")
+plt.title("Residual Corrected Demand Over Time")
 
-# Fixing to winter season by default
-RES = RES_winter
-Demand_price = demand_price_winter
-Demand_volume = demand_volume_winter
-D = D_winter
-max_dem = max_dem_winter
-min_dem = min_dem_winter
+plt.tight_layout()
+plt.show()
 
-# Load extreme production days (or use random)
-extreme_winter = np.random.rand(24)
-extreme_summer = np.random.rand(24)
 
-# Season dictionary
-season_dict = {
-    "winter": {
-        "RES": RES_winter,
-        "Demand_price": demand_price_winter,
-        "Demand_volume": demand_volume_winter,
-        "D": D_winter,
-        "max_dem": max_dem_winter,
-        "min_dem": min_dem_winter,
-        "M": [max(demand_volume_winter.iloc[D_winter-1, t], RES_winter[t]) for t in range(T)]
-    },
-    "summer": {
-        "RES": RES_summer,
-        "Demand_price": demand_price_summer,
-        "Demand_volume": demand_volume_summer,
-        "D": D_summer,
-        "max_dem": max_dem_summer,
-        "min_dem": min_dem_summer,
-        "M": [max(demand_volume_summer.iloc[D_summer-1, t], RES_summer[t]) for t in range(T)]
-    }
-}
+# Final initialization
+M = [max(Demand_volume.iloc[D-1, t], RES[t]) for t in range(T)]
+Demand_price = Demand_price.to_numpy()
+Demand_volume = Demand_volume.to_numpy()
 
 
 # Function containing the optimisation model
 def model_run(start_state, q_ch_assumed, q_dis_assumed, player, season):
-
-    season_vars = season_dict[season]
-    RES = season_vars["RES"]
-    Demand_price = season_vars["Demand_price"]
-    Demand_volume = season_vars["Demand_volume"]
-    D = season_vars["D"]
-    max_dem = season_vars["max_dem"]
-    min_dem = season_vars["min_dem"]
-    M = season_vars["M"]
 
     model = gp.Model()
     model.setParam("Threads", 8)
@@ -167,10 +150,10 @@ def model_run(start_state, q_ch_assumed, q_dis_assumed, player, season):
     model.addConstrs(gp.quicksum(z_ch[t, i] + z_dis[t, i] for i in range(N)) <= 1 for t in temps)
     model.addConstrs(gp.quicksum(u[t, i] for i in range(D)) == 1 for t in temps)
 
-    model.addConstr(e[1] == E_max_all[player] * alpha_batt + Eta_all[player] * q_ch[1] - q_dis[1])
-    model.addConstrs(e[t] == e[t-1] + Eta_all[player] * q_ch[t] - q_dis[t] for t in range(2, T+1))
-    model.addConstr(e[T] <= E_max_all[player] * alpha_batt * (1 + tolerance_end))
-    model.addConstr(e[T] >= E_max_all[player] * alpha_batt * (1 - tolerance_end))
+    model.addConstr(e[0] == E_max_all[player] * alpha_batt + Eta_all[player] * q_ch[0] - q_dis[0])
+    model.addConstrs(e[t] == e[t-1] + Eta_all[player] * q_ch[t] - q_dis[t] for t in range(1, T))
+    model.addConstr(e[T-1] <= E_max_all[player] * alpha_batt * (1 + tolerance_end))
+    model.addConstr(e[T-1] >= E_max_all[player] * alpha_batt * (1 - tolerance_end))
 
     model.addConstrs(q_tot[t] >= Demand_volume[j, t] - M[t] * (1 - u[t, j]) for t in temps for j in range(1, D-1))
     model.addConstrs(q_tot[t] <= Demand_volume[j+1, t] + M[t] * (1 - u[t, j]) for t in temps for j in range(1, D-1))
