@@ -34,7 +34,11 @@ Demand_volume_total = Demand_volume.iloc[D-1, :].values
 max_dem = data.load_capacity
 min_dem = 0
 
-# Plot
+# Load RES profile
+RES = np.array([data.generator_availability['W3'][t] * 1.3 * max_dem for t in range(1,T+1)])
+Residual = -RES + Demand_volume_total
+
+# Plotting
 plt.figure(figsize=(15,8))
 plt.subplot(2,2,1)
 for t in temps:
@@ -53,9 +57,6 @@ plt.xlabel("Hour (h)")
 plt.ylabel("Cumulated demand (MWh)")
 plt.title("Demand Over Time")
 
-# Load RES profile
-RES = np.array([data.generator_availability['W3'][t] * max_dem for t in range(1,T+1)])
-
 plt.subplot(2,2,3)
 plt.plot(RES, color="green")
 plt.plot(Demand_volume_total, color='red', linestyle='--', linewidth=0.8, label="Total Demand")
@@ -64,10 +65,17 @@ plt.ylabel("Power (MW)")
 plt.title("Renewable Production Over Time")
 plt.legend()
 
+plt.subplot(2,2,4)
+plt.plot(Residual, color="red")
+plt.xlabel("Time (h)")
+plt.ylabel("Cumulated residual demand (MWh)")
+plt.title("Residual Corrected Demand Over Time")
+plt.tight_layout()
+
 # Battery/Storage parameters
 alpha_batt = 0.5
 tolerance_end = 0.05
-N = 20
+N = 20                  # Discretization number for power outputs
 
 n_players = 2
 Q_max_all = np.zeros(n_players)
@@ -79,23 +87,39 @@ Eta_all = np.zeros(n_players)
 # Storage requirement computation
 min_eta = 0.85
 
-# Summer storage needs
-Residual = -RES + Demand_volume_total
-Residual_corrected = np.where(Residual > 0, Residual / min_eta, Residual)
+# Storage needs
+Residual_corrected = np.where(Residual > 0, Residual / min_eta, Residual)   # If residual demand, then battery will discharge -> 1/eta % more energy needed to satisfy the demand
 Cummul_res_corr = np.cumsum(Residual_corrected)
+# ..... if always surplus deficit, then offset by initial value to get full battery need
 Local_cumul = Cummul_res_corr - np.minimum.accumulate(Cummul_res_corr)
-Stor_req = np.max(Local_cumul)
+
+Stor_req = np.max(Local_cumul)          
 Stor_req = int(np.floor(Stor_req))
 
-Capa_req = np.max(Residual_corrected)
+Capa_req = np.max(Residual_corrected)   # Max power needed over each hour to satisfy the demand > informs total Q_max that needs to be higher
 Capa_req = int(np.floor(Capa_req))
 
-# Plot
-plt.subplot(2,2,4)
-plt.plot(Residual_corrected, color="red")
-plt.xlabel("Time (h)")
-plt.ylabel("Cumulated residual demand (MWh)")
-plt.title("Residual Corrected Demand Over Time")
+# Plotting
+fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+# Plot 1: Residual and Residual Corrected
+axs[0].plot(Residual, label='Residual (Demand - RES)', color='tab:blue')
+axs[0].plot(Residual_corrected, label='Residual Corrected (battery inefficiency)', color='tab:orange')
+axs[0].axhline(0, color='black', linestyle='--', linewidth=0.8)
+axs[0].set_title('Residual Demand vs Corrected Residual')
+axs[0].set_ylabel('Power [MW]')
+axs[0].legend()
+axs[0].grid(True)
+
+# Plot 2: Cumulative and Local Cumulative
+axs[1].plot(Cummul_res_corr, label='Cumulative Residual Corrected', color='tab:green')
+axs[1].plot(Local_cumul, label='Local Cumulative (Storage Level)', color='tab:red')
+axs[1].axhline(0, color='black', linestyle='--', linewidth=0.8)
+axs[1].set_title('Cumulative Imbalance and Virtual Storage Level')
+axs[1].set_xlabel('Hour')
+axs[1].set_ylabel('Energy [MWh]')
+axs[1].legend()
+axs[1].grid(True)
 
 plt.tight_layout()
 plt.show()
@@ -168,6 +192,7 @@ def model_run(start_state, q_ch_assumed, q_dis_assumed, player, season):
     model.addConstrs(q_tot[t] >= Demand_volume[1, t] - M[t] * u[t, 0] for t in temps)
     model.addConstrs(q_tot[t] <= Demand_volume[1, t] + M[t] * (1 - u[t, 0]) for t in temps)
 
+    model.Params.OutputFlag = 0
     model.optimize()
 
     state = [[z_ch[t, i].X for i in range(N)] for t in temps], \
@@ -214,14 +239,12 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, state_ini, season, n_players):
     elif n_players == 8:
         size_stor = [0.05, 0.05, 0.1, 0.1, 0.1, 0.15, 0.2, 0.25]
 
-    for player in range(1, n_players + 1):
-        # OC_all[player] = 1 - (player // 2) * 0.15
+    for player in range(n_players):
         OC_all[player] = 0.5
-        Eta_all[player] = 0.85
-        # Eta_all[p] = 0.85 - 0.01 * ((p-1)//2)
-        Q_max_all[player] = Capa_req * size_stor[player - 1]
+        Eta_all[player] = min_eta
+        Q_max_all[player] = Capa_req * size_stor[player]
         Q_all[player] = [Q_max_all[player] * (i / N) for i in range(1, N+1)]
-        E_max_all[player] = Stor_req * size_stor[player - 1]
+        E_max_all[player] = Stor_req * size_stor[player]
         state[player], output[player], u[player] = model_run(state_ini, q_ch_assumed_ini, q_dis_assumed_ini, player, season)
 
     state_sys = [state[player][:2] for player in range(n_players)]
@@ -233,12 +256,16 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, state_ini, season, n_players):
     tol = 1e-6
     while iter < 50 and not any(arrays_are_equal(state_sys, ne_state, n_players, tol) for ne_state in ne.values()):
         ne[iter + 1] = state_sys.copy()
+        print(iter)
 
         for player in range(n_players):
             others = [p for p in range(n_players) if p != player]
-            q_ch_assumed = sum(output[other][0] for other in others)
-            q_dis_assumed = sum(output[other][1] for other in others)
-            state[player], output[player], u[player] = model_run(state[player], q_ch_assumed, q_dis_assumed, player + 1, season)
+            q_ch_assumed = [0]*24
+            q_dis_assumed = [0]*24
+            for other in others:
+                q_ch_assumed = [q_ch_assumed[t] + output[other][0][t] for t in temps]
+                q_dis_assumed = [q_dis_assumed[t] + output[other][1][t] for t in temps]
+            state[player], output[player], u[player] = model_run(state[player], q_ch_assumed, q_dis_assumed, player, season)
 
         state_sys = [state[player][:2] for player in range(n_players)]
         iter += 1
