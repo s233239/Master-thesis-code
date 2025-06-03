@@ -21,7 +21,7 @@ OC_default = 5          # Default storage operating cost
 cap_factor = 5          # Ratio: Total storage capacity / Total storage power rate
 N = 5                   # Discretization number for power outputs
 tol = 1e-5              # Nash equilibrium tolerance parameter
-max_iter = 100          # Nash equilibrium maximum iteration number
+max_iter = 200          # Nash equilibrium maximum iteration number
 
 
 # Diverse parameters
@@ -29,8 +29,8 @@ np.random.seed(101)
 epsilon = 1e-5
 
 # Set time horizon parameters_
-T = 24   # number of time periods
-temps = range(T)  # time periods iterable
+T = 24              # number of time periods
+temps = range(T)    # time periods iterable
 
 # Load demand curves
 D = len(data.LOADS) # number of loads (10)
@@ -242,7 +242,7 @@ def model_run(q_ch_assumed, q_dis_assumed, player):
     # Charging is possible from residual RES
     model.addConstrs(q_ch[t] <= residual_production[t] for t in temps)
     
-    model.addConstrs(q_dis[t] <= residual_demand_volume[-1,t] for t in temps)
+    # model.addConstrs(q_dis[t] <= residual_demand_volume[-1,t] for t in temps)
 
     # Optimization of the model
     model.optimize()
@@ -369,7 +369,7 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
     iter += 1
 
     if n_players == 1:
-        return output, ne, iter, u
+        return output, ne, iter, u, profits
 
     while iter < max_iter and not arrays_are_equal(state_sys, ne[-2], n_players, tol):
         # print(iter)
