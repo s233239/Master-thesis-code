@@ -547,24 +547,26 @@ plt.tight_layout()
 
 
 # 6. Nash Equilibrium Result
-plt.figure(figsize=(15,8))
+convergence_fig = plt.figure(figsize=(15,8))
+x = range(1, len(profits[0]) + 1)
 
 plt.subplot(2,2,1)
-plt.plot(range(1, len(diff_table) + 1), diff_table, label="Max Change per Iteration")
-plt.axhline(y=tol, linestyle='--', color='gray', linewidth=0.8)
+plt.plot(x[1:], diff_table, label="Max Change per Iteration")
 plt.xlabel("Iteration")
 plt.ylabel("Computed Difference")
 # plt.yscale("log")
+plt.xticks(np.arange(min(x)+1, max(x)+1, 1))  # Set x ticks to integers
 plt.title("Cournot Iteration Convergence Plot")
 plt.grid(True)
 plt.legend()
 
 plt.subplot(2,2,2)
 for player in range(n_players):
-    plt.plot(range(1, len(profits[0]) + 1), profits[player], label=f"Player {player+1} Profit Over Iteration")
+    plt.plot(x, profits[player], label=f"Player {player+1} Profit Over Iteration")
 plt.xlabel("Iteration")
 plt.ylabel("Profit (€)")
 plt.title("Profit Evolution over Cournot Iteration")
+plt.ylim(bottom = 0)
 plt.grid(True)
 plt.legend()
 
