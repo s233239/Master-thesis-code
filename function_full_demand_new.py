@@ -13,15 +13,15 @@ import data
 ## --- Initialization of the problem ---
 
 # Set changing parameters
-n_players = 4           # Number of storage players in the Cournot game \in {1, 2, 4, 6, 8}
-factor = 1.3            # Scaling factor for RES production
-alpha_batt = 0.5        # Initial storage level (%)
-min_eta = 0.85          # Minimal storage round-trip efficiency
-OC_default = 5          # Default storage operating cost
-cap_factor = 5          # Ratio: Total storage capacity / Total storage power rate
-N = 5                   # Discretization number for power outputs
-tol = 1e-5              # Nash equilibrium tolerance parameter
-max_iter = 200          # Nash equilibrium maximum iteration number
+n_players = 6               # Number of storage players in the Cournot game \in {1, 2, 4, 6, 8}
+factor = 1.3                # Scaling factor for RES production
+alpha_batt = 0.5            # Initial storage level (%)
+min_eta = 0.85              # Minimal storage round-trip efficiency
+OC_default = 5              # Default storage operating cost
+storage_Crate_default = 0.5 # Charge/discharge rate relative to energy capacity. A 1C battery can discharge fully in 1 hour.
+N = 5                       # Discretization number for power outputs
+tol = 1e-5                  # Nash equilibrium tolerance parameter
+max_iter = 200              # Nash equilibrium maximum iteration number
 
 
 # Diverse parameters
@@ -101,34 +101,40 @@ plt.tight_layout()
 
 # Battery/Storage parameters
 Q_max_all = np.zeros(n_players)         # Maximum available power (MW)
+Q_all = [[] for _ in range(n_players)]  # List of possible power bids
 OC_all = np.zeros(n_players)            # Marginal cost (€/MW)
 E_max_all = np.zeros(n_players)         # Maximum battery level (MWh)
-Q_all = [[] for _ in range(n_players)]  # List of possible power bids
 Eta_all = np.zeros(n_players)           # Storage round-trip efficiency
+
+# Offset with zero value to effectively compute battery requirements 
+# (if first residual demand value x is positive, Local_cumul=0 though we would need x MWh to satisfy the demand - it is due to the min being updated over time but not initialized)
+Residual = np.insert(Residual, 0, 0, 0)
 
 # Storage requirement computation
 Residual_corrected = np.where(Residual > 0, Residual / min_eta, Residual)   # Taking into account the round-trip efficiency when the battery discharge on the grid (=> need to discharge 100% + eta% energy to satisfy the corresponding demand)
 
 Cummul_res_corr = np.cumsum(Residual_corrected)
 
-# ..... if always surplus deficit, then offset by initial value to get full battery need
 Local_cumul = Cummul_res_corr - np.minimum.accumulate(Cummul_res_corr)
                                 # minimum of sliced list[:t]
 
-PowerRating_req = np.max(np.abs(Residual_corrected))    # Minimum instantaneous power the storage system need to have to satisfy the demand at any time step > informs Q_max
-PowerRating_req = int(np.round(PowerRating_req/100)*100)
+# Minimum total amount of energy the battery must store to satisfy the demand at any time step > informs E_max
+Capacity_req = np.max(Local_cumul)                      
+Capacity_req = int(np.ceil(Capacity_req))
 
-# Capacity_req = np.max(Local_cumul)                      # Minimum total amount of energy the battery must store to satisfy the demand at any time step > informs E_max
-# Capacity_req = int(np.floor(Capacity_req))
-Capacity_req = PowerRating_req * cap_factor
+# PowerRating_req = np.max(np.abs(Residual_corrected))    # Minimum instantaneous power the storage system need to have to satisfy the demand at any time step > informs Q_max
+# PowerRating_req = int(np.round(PowerRating_req/10)*10)
+PowerRating_available = Capacity_req * storage_Crate_default
+
 
 # Plotting
 fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+x = range(T+1)
 
 # Plot 1: Residual and Residual Corrected
-axs[0].plot(Residual, label='Residual (Demand - RES)', color='tab:blue')
-axs[0].plot(Residual_corrected, label='Residual Corrected (battery inefficiency)', color='tab:orange')
-axs[0].axhline(PowerRating_req, color='tab:red', linestyle='--', label='Required Power Rate (MW)')
+axs[0].bar(x, height=Residual_corrected, color='tab:orange', label='Residual Corrected (battery inefficiency)', align='edge')
+axs[0].bar(x, height=Residual, color='tab:blue', label='Residual (Demand - RES)', align='edge')
+axs[0].axhline(PowerRating_available, color='tab:red', linestyle='--', label='[max] Available Storage Power (MW)')
 axs[0].axhline(0, color='black', linestyle='--', linewidth=0.8)
 axs[0].set_title('Residual Demand vs Corrected Residual')
 axs[0].set_ylabel('Power [MW]')
@@ -136,9 +142,9 @@ axs[0].legend()
 axs[0].grid(True)
 
 # Plot 2: Cumulative and Local Cumulative
-axs[1].plot(Cummul_res_corr, label='Cumulative Residual Corrected', color='tab:green')
-axs[1].plot(Local_cumul, label='Local Cumulative (Storage Level)', color='tab:red')
-axs[1].axhline(Capacity_req, color='tab:orange', linestyle='--', label='Required Energy Capacity (MWh)')
+axs[1].plot(Cummul_res_corr, label='Cumulative Residual Corrected', color='tab:green', marker='.')
+axs[1].plot(Local_cumul, label='Local Cumulative (Storage Level)', color='tab:red', marker='.')
+axs[1].axhline(Capacity_req, color='tab:orange', linestyle='--', label='[max] Required Energy Capacity (MWh)')
 axs[1].axhline(0, color='black', linestyle='--', linewidth=0.8)
 axs[1].set_title('Cumulative Imbalance and Virtual Storage Level')
 axs[1].set_xlabel('Hour')
@@ -318,8 +324,6 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
         size_stor = [1/3, 2/3]
     elif n_players == 4:
         size_stor = [0.1, 0.2, 0.3, 0.4]
-        # size_stor = [0.3, 0.3, 0.4, 0.5]
-        # size_stor = [1/3, 2/3, 1/3, 2/3]
     elif n_players == 6:
         size_stor = [0.05, 0.1, 0.1, 0.15, 0.25, 0.35]
     elif n_players == 8:
@@ -339,9 +343,9 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
     for player in range(n_players):
         OC_all[player] = OC_default
         Eta_all[player] = min_eta
-        Q_max_all[player] = int(np.floor(PowerRating_req * size_stor[player] / 10) * 10)
-        Q_all[player] = [round(Q_max_all[player] * (i / N),2) for i in range(1, N+1)]
         E_max_all[player] = int(np.floor(Capacity_req * size_stor[player] / 10) * 10)
+        Q_max_all[player] = int(np.floor(PowerRating_available * size_stor[player]))
+        Q_all[player] = [round(Q_max_all[player] * (i / N),2) for i in range(1, N+1)]
 
         # Fill the summary dictionnary
         summary_data["Player"].append(chr(65 + player))
