@@ -56,6 +56,7 @@ Residual = -RES + Demand_volume_total
 
 # Plotting
 plt.figure(figsize=(15,8))
+
 plt.subplot(2,2,1)
 for t in temps:
     plt.step(
@@ -96,7 +97,7 @@ plt.title("Residual Demand Over Time")
 plt.grid()
 
 plt.tight_layout()
-#plt.savefig("energy-data.png")
+# plt.savefig("energy-data.png")
 
 
 # Battery/Storage parameters
@@ -153,7 +154,7 @@ axs[1].legend()
 axs[1].grid(True)
 
 plt.tight_layout()
-#plt.savefig("storage-data.png")
+# plt.savefig("storage-data.png")
 
 
 # Final initialization
@@ -273,10 +274,10 @@ def model_run(q_ch_assumed, q_dis_assumed, player):
     
     u = [[u[t, j].X for j in range(D)] for t in temps]
 
-    y = [[sum(u[t][k] for k in range(j+1, D)) for j in range(D-1)] for t in temps]
+    y = [[1 - sum(u[t][k] for k in range(j+1)) for j in range(D)] for t in temps]
 
-    CS = [sum((Demand_price[j, t] - Demand_price[j+1, t]) * (Demand_volume[j+1, t] - Demand_volume[0, t]) * y[t][j]
-              for j in range(D-1)) for t in temps]
+    CS = [sum((Demand_price[j, t] - Demand_price[j+1, t]) * Demand_volume[j, t] * y[t][j]
+                for j in range(D-1)) for t in temps]    # not necessary to include computation for last satisfied load bc it sets the price hence does not increase CS
 
     price = [sum(residual_demand_price[j,t] * u[t][j] for j in range(D)) for t in temps]
 
@@ -403,17 +404,6 @@ output, ne, iter, u, profits = nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_pl
 
 print("Optimization was successful.",f"\nIt converged in {iter} iterations.")
 
-# Flatten the data from output into column vectors
-column_vectors = [
-    output[p][i]
-    for p in range(len(output))
-    for i in range(len(output[0]))
-]
-
-column_labels = ["Charge", "Discharge", "Battery", "Price", "Revenue", "CS"]
-column_names = [f"{label}{i}" for i in range(n_players) for label in column_labels]
-
-df = pd.DataFrame([column_vectors], columns=column_names)
 
 ## --- Export results ---
 
@@ -454,10 +444,11 @@ unmet_demand = sum(max(Demand_volume[-1, t] - q_total[t], 0) for t in temps)
 curtailed_prod = sum(max(-Demand_volume[-1, t] + q_total[t], 0) for t in temps)
 
 # 9. Consumer Surplus
-CS = [
-    output[0][5][t] + (Demand_price[0, t] - market_price[t]) * Demand_volume[0, t]
-    for t in temps
-]
+for p in range(1,n_players):
+    if output[p][5][t] != output[0][5][t]:
+        raise "Error in convergence"
+    
+CS = [output[0][5][t] for t in temps]    # Now we can assume each player outputs the same CS
 
 # 10. Producer Surplus
 PS = [
@@ -475,7 +466,6 @@ plt.figure(figsize=(15,8))
 temps_np = np.array(temps)
 temps_with_zero_np = np.array([t for t in temps] + [T])
 
-
 # 1. Market Price Plot
 plt.subplot(2,2,1)
 
@@ -492,9 +482,68 @@ plt.title("Market Price Over Time")
 plt.grid(True)
 
 
-# 2. Production and SoC per Player
+# 2. Market Clearing View
+plt.subplot(2,2,2)
+
+plt.step(temps_with_zero_np, np.append(Demand_volume[-1, :], Demand_volume[-1, -1]), label="Demand", where='post', color='red', linestyle='--') 
+plt.bar(temps_np+0.5, RES, label="RES Production", color='green')
+plt.bar(temps_np+0.5, supply_total, label="Total Supply from Players", color='blue', bottom=RES)
+plt.bar(temps_np+0.5, demand_total, label="Total Demand from Players", color='blue', alpha=0.7, bottom=0)
+plt.xlabel("Time (h)")
+plt.ylabel("Power (MW)")
+bottom, top = plt.ylim()
+plt.ylim(top=top+20)
+plt.legend(loc='lower center', bbox_to_anchor=(0.5, 0.2))
+plt.title("Market Clearing: Supply vs Demand Over Time")
+
+
+# 3. Summary Bars for Unmet Demand, Curtailment and Market Metrics
+ax1 = plt.subplot(2,2,3)
+
+# --- Ax1: Energy metrics ---
+ax1_labels = ["Unmet Demand", "Curtailed Production"]
+ax1_heights = [unmet_demand, curtailed_prod]
+x1 = np.arange(len(ax1_labels))
+
+bars1 = ax1.bar(x1, ax1_heights, width=0.5, color=['tab:red', 'tab:green'], label="Energy Metrics")
+ax1.bar_label(bars1, [f"{round(x)} MWh" for x in ax1_heights])
+ax1.set_ylabel("Energy (MWh)")
+ax1.set_ylim(0, max(ax1_heights) * 1.2)
+
+# --- Ax2: Economic metrics ---
+ax2_labels = ["Consumer Surplus", "Producer Surplus", "Social Welfare"]
+ax2_heights = [sum(CS), sum(PS), SW]                # Can be improved by stacking each CS[t], PS[t]
+x2 = np.arange(len(ax2_labels)) + len(x1) + 0.5     # offset to avoid overlap
+
+ax2 = ax1.twinx()
+bars2 = ax2.bar(x2, ax2_heights, width=0.5, color='tab:purple', label="Welfare Metrics")
+ax2.bar_label(bars2, [f"{round(x)} €" for x in ax2_heights])
+ax2.set_ylabel("Monetary Value (€)")
+ax2.set_ylim(0, max(ax2_heights) * 1.2)
+
+xticks = np.concatenate([x1, x2])
+xlabels = ax1_labels + ax2_labels
+ax1.set_xticks(xticks)
+ax1.set_xticklabels(xlabels, rotation=20)
+
+ax1.set_title("Market Metrics")
+
+
+# 4. Optimized Profits
+plt.subplot(2,2,4)
+
+player_labels = [f"{chr(65 + p)}" for p in range(n_players)]
+container = plt.bar(x=player_labels, height=profit_tot)
+plt.bar_label(container, [f"{round(p)} €" for p in profit_tot])
+plt.ylim(top=1.1*max(profit_tot))
+plt.title("Player Profits after Optimization")
+
+plt.tight_layout()
+
+
+# 5. Production and SoC per Player
 # Ax 1 for energy storage levels, ax 2 for energy storage discharging/charging power
-ax1 = plt.subplot(2,2,3) 
+fig, ax1 = plt.subplots(figsize=(15,8))
 
 for player in range(n_players):
     ax1.plot(temps_with_zero_np, batt[player], label=f"SoC for Player {player + 1}")
@@ -514,44 +563,8 @@ ax2.grid()
 # fig.text(0.5, 0.01, "Player Production = Discharge - Charge Over Time", ha="center")
 
 
-# 3. Market Clearing View
-plt.subplot(2,2,2)
-
-plt.step(temps_with_zero_np, np.append(Demand_volume[-1, :], Demand_volume[-1, -1]), label="Demand", where='post', color='red', linestyle='--') 
-plt.bar(temps_np+0.5, RES, label="RES Production", color='green')
-plt.bar(temps_np+0.5, supply_total, label="Total Supply from Players", color='blue', bottom=RES)
-plt.bar(temps_np+0.5, demand_total, label="Total Demand from Players", color='blue', alpha=0.7, bottom=0)
-plt.xlabel("Time (h)")
-plt.ylabel("Power (MW)")
-bottom, top = plt.ylim()
-plt.ylim(top=top+20)
-plt.legend(loc='lower center', bbox_to_anchor=(0.5, 0.2))
-plt.title("Market Clearing: Supply vs Demand Over Time")
-
-
-# # 4. Summary Bars for Unmet Demand and Curtailment
-# plt.subplot(2,2,4)
-
-# plt.bar(["Unmet Demand", "Curtailed Production"], [unmet_demand, curtailed_prod], color=["orange", "purple"])
-# plt.title("Total Unmet Demand and Curtailed Production")
-# plt.ylabel("Energy (MWh)")
-
-
-# 5. Summary Bars
-plt.subplot(2,2,4)
-
-labels = [f"Player {p+1} Profit" for p in range(n_players)]
-labels_bis = labels + ["Consumer Surplus", "Producer Surplus", "Social Welfare"]
-container = plt.bar(x=labels, height=profit_tot)
-plt.bar_label(container, [f"{round(p)} €" for p in profit_tot])
-plt.ylim(top=1.1*max(profit_tot))
-plt.title("Player Profits after Optimization")
-
-plt.tight_layout()
-
-
 # 6. Nash Equilibrium Result
-convergence_fig = plt.figure(figsize=(15,8))
+plt.figure(figsize=(15,8))
 x = range(1, len(profits[0]) + 1)
 
 plt.subplot(2,2,1)
@@ -569,6 +582,7 @@ for player in range(n_players):
     plt.plot(x, profits[player], label=f"Player {player+1} Profit Over Iteration")
 plt.xlabel("Iteration")
 plt.ylabel("Profit (€)")
+plt.xticks(np.arange(min(x), max(x)+1, 1))  # Set x ticks to integers
 plt.title("Profit Evolution over Cournot Iteration")
 plt.ylim(bottom = 0)
 plt.grid(True)
