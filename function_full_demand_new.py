@@ -249,7 +249,6 @@ def model_run(q_ch_assumed, q_dis_assumed, player):
     # Charging is possible from residual RES
     model.addConstrs(q_ch[t] <= residual_production[t] for t in temps)
     
-    # model.addConstrs(q_dis[t] <= residual_demand_volume[-1,t] for t in temps)
 
     # Optimization of the model
     model.optimize()
@@ -376,7 +375,7 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
     if n_players == 1:
         return output, ne, iter, u, profits
 
-    while iter < max_iter and not arrays_are_equal(state_sys, ne[-2], n_players, tol):
+    while not arrays_are_equal(state_sys, ne[-2], n_players, tol) and iter < max_iter:
         # print(iter)
 
         # Profit maximisation for each player
@@ -392,6 +391,12 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
         # state_sys = [output[player][4] for player in range(n_players)]
         ne.append(state_sys.copy())
         iter += 1
+    
+    if iter == max_iter:
+        print("Optimization was unsuccessful. It did not converge.")
+    else:
+        print("Optimization was successful.",f"\nIt converged in {iter} iterations.")
+
         
     return output, ne, iter, u, profits
 
@@ -402,7 +407,6 @@ q_dis_assumed_ini = [0 for _ in temps]
 
 output, ne, iter, u, profits = nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol)
 
-print("Optimization was successful.",f"\nIt converged in {iter} iterations.")
 
 
 ## --- Export results ---
@@ -430,6 +434,7 @@ revenue = [
 
 # 5. Total profit per player
 profit_tot = [sum(revenue[player]) for player in range(n_players)]
+profit_tot_by_cap = [profit_tot[p]/E_max_all[p] for p in range(n_players)]
 
 # 6. Total quantity offered to the market
 supply_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] >= 0) for t in temps]
@@ -535,6 +540,8 @@ plt.subplot(2,2,4)
 player_labels = [f"{chr(65 + p)}" for p in range(n_players)]
 container = plt.bar(x=player_labels, height=profit_tot)
 plt.bar_label(container, [f"{round(p)} €" for p in profit_tot])
+container = plt.bar(x=player_labels, height=profit_tot_by_cap)
+plt.bar_label(container, [f"{round(p)} €/MWh" for p in profit_tot_by_cap])
 plt.ylim(top=1.1*max(profit_tot))
 plt.title("Player Profits after Optimization")
 
@@ -566,13 +573,21 @@ ax2.grid()
 # 6. Nash Equilibrium Result
 plt.figure(figsize=(15,8))
 x = range(1, len(profits[0]) + 1)
+if len(x) <= 20:
+    xticks = np.array([1]+[2+2*i for i in range(int(np.floor(len(x)/2)))]+[len(x)])
+elif len(x) <= 50:
+    xticks = np.array([1]+[5+5*i for i in range(int(np.floor(len(x)/5)))]+[len(x)])
+elif len(x) <= 100:
+    xticks = np.array([1]+[10+10*i for i in range(int(np.floor(len(x)/10)))]+[len(x)])
+elif len(x) <= 200:
+    xticks = np.array([1]+[20+20*i for i in range(int(np.floor(len(x)/20)))]+[len(x)])
+
 
 plt.subplot(2,2,1)
 plt.plot(x[1:], diff_table, label="Max Change per Iteration")
 plt.xlabel("Iteration")
 plt.ylabel("Computed Difference")
-# plt.yscale("log")
-plt.xticks(np.arange(min(x)+1, max(x)+1, 1))  # Set x ticks to integers
+plt.xticks(xticks)   
 plt.title("Cournot Iteration Convergence Plot")
 plt.grid(True)
 plt.legend()
@@ -582,7 +597,8 @@ for player in range(n_players):
     plt.plot(x, profits[player], label=f"Player {player+1} Profit Over Iteration")
 plt.xlabel("Iteration")
 plt.ylabel("Profit (€)")
-plt.xticks(np.arange(min(x), max(x)+1, 1))  # Set x ticks to integers
+xticks[0]=2
+plt.xticks(xticks)       
 plt.title("Profit Evolution over Cournot Iteration")
 plt.ylim(bottom = 0)
 plt.grid(True)
