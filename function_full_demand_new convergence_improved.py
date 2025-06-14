@@ -65,7 +65,7 @@ for t in temps:
         label=f"Hour {t+1}")
 plt.xlabel("Volume (MWh)")
 plt.ylabel("Price (€/MWh)")
-plt.title("Load Demand Curve")
+plt.title("Price Demand Curve")
 plt.grid()
 # plt.legend()
 
@@ -396,20 +396,20 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
 
     if iter == max_iter:
         convergence = False
-        for p in range(n_players):
-            print(f"Convergence has not been reached. Let's try again by fixing player {chr(64 + n_players - p)} outputs.")
+        # Iterate the profit maximisation for all players again WHILE fixing one or more players' decision variables
+        for p in range(n_players-1):
+            print(f"Convergence has not been reached. Let's try again by fixing player {chr(65 + p)} outputs.")
 
             for it in range(max_iter//10):
 
-                for k in range(p+1):
-                    player = n_players-(k+1)
+                for player in range(p+1):
                     q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in temps]
                     q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in temps]
                     state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, 
                                                                          state_ini=(np.array(state[player][0]), np.array(state[player][1])))  
                     profits[player].append(sum(output[player][4][t] for t in temps))      
 
-                for player in range(n_players-(k+1)):
+                for player in range(p+1, n_players):
                     q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in temps]
                     q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in temps]
                     state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player)
@@ -424,9 +424,15 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
                     convergence = True
                     break
 
+                # Otherwise, continue iterating
+
+            # If convergence has been reached on a nested loop, break as well the current iteration
             if convergence:
                 break
             
+            # Otherwise, loop back by fixing another player decision variables
+
+        # All but one player's decision variables have been fixed, but it has not converged
         if not convergence:
             print("Optimization was unsuccessful.")
 
@@ -469,12 +475,12 @@ revenue = [
 
 # 5. Total profit per player
 profit_tot = [sum(revenue[player]) for player in range(n_players)]
-profit_tot_by_cap = [profit_tot[p]/E_max_all[p] for p in range(n_players)]
+profit_tot_by_cap = [profit_tot[p]/E_max_all[p] if E_max_all[p]!=0 else 0 for p in range(n_players)]
 
 # 6. Total quantity offered to the market
-supply_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] >= 0) for t in temps]
-demand_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] < 0) for t in temps]
-proad_total = [supply_total[t] - demand_total[t] for t in temps]
+supply_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] >= 0) for t in temps]   # positive for supply
+demand_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] < 0) for t in temps]    # negative for demand
+proad_total = [supply_total[t] + demand_total[t] for t in temps]
 q_total = [RES[t] + proad_total[t] for t in temps]
 
 # 7. Unmet demand
@@ -570,15 +576,24 @@ ax1.set_title("Market Metrics")
 
 
 # 4. Optimized Profits
-plt.subplot(2,2,4)
+ax1 = plt.subplot(2,2,4)
 
 player_labels = [f"{chr(65 + p)}" for p in range(n_players)]
-container = plt.bar(x=player_labels, height=profit_tot)
-plt.bar_label(container, [f"{round(p)} €" for p in profit_tot])
-container = plt.bar(x=player_labels, height=profit_tot_by_cap)
-plt.bar_label(container, [f"{round(p)} €/MWh" for p in profit_tot_by_cap])
-plt.ylim(top=1.1*max(profit_tot))
-plt.title("Player Profits after Optimization")
+width = 0.4
+x = np.arange(1,n_players+1,1)
+
+container = ax1.bar(x=x-width/2, height=profit_tot, width=width, tick_label=player_labels, color="tab:blue")
+ax1.bar_label(container, [f"{round(p)} €" for p in profit_tot])
+ax1.set_ylim(top=1.1*max(profit_tot))
+ax1.set_ylabel("Total profit")
+
+ax2 = ax1.twinx()
+container = ax2.bar(x=x+width/2, height=profit_tot_by_cap, width=width, label=player_labels, color="tab:orange")
+ax2.bar_label(container, [f"{round(p)} €/MWh" for p in profit_tot_by_cap])
+ax2.set_ylim(top=1.2*max(profit_tot_by_cap))
+ax2.set_ylabel("Profit by Installed Capacity Unit")
+
+ax1.set_title("Player Optimal Profits over the Period")
 
 plt.tight_layout()
 
@@ -621,7 +636,7 @@ elif len(x) <= 200:
 plt.subplot(2,2,1)
 plt.plot(x[1:], diff_table, label="Max Change per Iteration")
 plt.xlabel("Iteration")
-plt.ylabel("Computed Difference")
+plt.ylabel("Number of Computed Difference")
 plt.xticks(xticks)   
 plt.title("Cournot Iteration Convergence Plot")
 plt.grid(True)
@@ -638,6 +653,7 @@ plt.title("Profit Evolution over Cournot Iteration")
 plt.ylim(bottom = 0)
 plt.grid(True)
 plt.legend()
+
 
 # Adjust layout and show the plot
 plt.show()
