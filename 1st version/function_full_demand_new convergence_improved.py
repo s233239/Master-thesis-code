@@ -13,8 +13,8 @@ import data
 ## --- Initialization of the problem ---
 
 # Set changing parameters
-n_players = 6               # Number of storage players in the Cournot game \in {1, 2, 4, 6, 8}
-factor = 1.3                # Scaling factor for RES production
+n_players = 4               # Number of storage players in the Cournot game \in {1, 2, 4, 6, 8}
+factor = 1.4                # Scaling factor for RES production
 alpha_batt = 0.5            # Initial storage level (%)
 min_eta = 0.85              # Minimal storage round-trip efficiency
 OC_default = 5              # Default storage operating cost
