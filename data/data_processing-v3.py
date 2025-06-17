@@ -1,5 +1,14 @@
 """
-Filters clusters by season to get separate medoid profiles per season for each RES.
+Filters clusters by season to get separate k-medoid (k>=1) profiles per season
+for each RES.
+Season = ['Winter', 'Spring', 'Summer', 'Autumn']
+
+Plots these season profiles for each RES capacity factor.
+Exports results as csv (optional): 
+    - medoids profiles for a given RES
+    - day-to-cluster assignments: index is the date, column values are the
+    assigned cluster for each RES
+This enables to observe and analyse the cluster mapping over time. 
 """
 
 import os
@@ -9,7 +18,7 @@ import matplotlib.pyplot as plt
 from sklearn_extra.cluster import KMedoids
 
 # === PARAMETERS ===
-n_clusters = 1
+n_clusters = 1  # Number of typical daily scenarios per RES per season
 csv_filename = "TimeSeries_2021-2024.csv"
 
 # === LOAD CSV ===
@@ -53,42 +62,46 @@ def create_daily_matrix(df, cf_col):
     return pivot.dropna()
 
 # === FUNCTION: Run clustering and plot ===
-def cluster_by_season(daily_matrix, label, res_tag):
+def cluster_by_season(daily_matrix, label):
     medoid_summary = []
     
-    plt.figure(figsize=(15,8))
     for season in ['Winter', 'Spring', 'Summer', 'Autumn']:
         season_dates = df[df['Season'] == season]['Date'].unique()
         seasonal_matrix = daily_matrix.loc[daily_matrix.index.isin(season_dates)]
 
-        if len(seasonal_matrix) < n_clusters:
-            print(f"Skipping {label} {season} (not enough days)")
-            continue
-        
         model = KMedoids(n_clusters=n_clusters, metric='euclidean', random_state=0)
         model.fit(seasonal_matrix)
 
-        medoids = seasonal_matrix.iloc[model.medoid_indices_]
+        medoids_profile = seasonal_matrix.iloc[model.medoid_indices_]
         cluster_labels = pd.Series(model.labels_, index=seasonal_matrix.index, name='Cluster')
 
         # Plot
-        ind = ['Winter', 'Spring', 'Summer', 'Autumn'].index(season)
-        plt.subplot(2,2,ind+1)
-        for i, (_, row) in enumerate(medoids.iterrows()):
-            plt.plot(row.values, label=f"Scenario {i+1}")
-        plt.title(f"{label} – {season} – {n_clusters} Typical Days")
-        plt.xlabel("Hour of Day")
-        plt.ylabel("Capacity Factor")
-        plt.grid(True)
-        plt.xticks(np.arange(0, 24))
-        plt.legend()
-        plt.tight_layout()
+        if season == "Winter":
+            linestyle = "solid"
+        elif season == "Spring":
+            linestyle = "dotted"
+        elif season == "Summer":
+            linestyle = "dashed"
+        else:
+            linestyle = "dashdot"
+        for i, (idx, row) in enumerate(medoids_profile.iterrows()):
+            plt.plot(row.values, label=f"{season} {i+1} ({idx})", linestyle=linestyle)
 
         # Save results
-        # medoids.to_csv(f'medoid_profiles_{res_tag}_{season}.csv')
+        # medoids_profile.to_csv(f'medoid_profiles_{res_tag}_{season}.csv')
         # cluster_labels.to_csv(f'cluster_assignments_{res_tag}_{season}.csv')
-        print(f"\n{label} – {season} cluster counts:\n{cluster_labels.value_counts().sort_index()}")
-        medoid_summary.append((season, medoids))
+        print(f"\n{label} - {season} cluster counts:\n{cluster_labels.value_counts().sort_index()}")
+        medoid_summary.append((season, medoids_profile))
+
+    # Plotting for each RES
+    plt.title(f"{label} Capacity Factor - {n_clusters} Typical Daily Profiles (2021-2024)")
+    plt.xlabel("Hour of Day")
+    plt.ylabel("Capacity Factor")
+    plt.grid(False)
+    plt.xticks(np.arange(0, 24, 2))
+    plt.ylim(top=1)
+    plt.legend(loc="upper left")
+    plt.tight_layout()
 
     return medoid_summary
 
@@ -98,8 +111,13 @@ daily_onshore = create_daily_matrix(df, 'CF_Onshore')
 daily_solar = create_daily_matrix(df, 'CF_Solar')
 
 # === CLUSTER PER RES AND SEASON ===
-offshore_medoids = cluster_by_season(daily_offshore, "Offshore Wind", "offshore")
-onshore_medoids = cluster_by_season(daily_onshore, "Onshore Wind", "onshore")
-solar_medoids = cluster_by_season(daily_solar, "Solar", "solar")
+plt.figure(figsize=(15,8))
+plt.subplot(2,2,1)
+offshore_medoids = cluster_by_season(daily_offshore, "Offshore Wind")
+plt.subplot(2,2,2)
+onshore_medoids = cluster_by_season(daily_onshore, "Onshore Wind")
+plt.subplot(2,2,3)
+solar_medoids = cluster_by_season(daily_solar, "Solar")
 
+# plt.savefig(fname=os.path.join(script_dir, "plots", f"data_processing-v3--{n_clusters}cluster.png"), format="png")
 plt.show()

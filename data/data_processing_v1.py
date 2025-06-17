@@ -63,20 +63,21 @@ daily_cf_solar = create_daily_matrix(df, 'CF_Solar')
 # === Compute true medoids (k-medoids with k=1) ===
 def compute_medoid(daily_cf_matrix):
     model = KMedoids(n_clusters=1, metric='euclidean', method='alternate', init='heuristic')
-    model.fit(daily_cf_matrix)
-    medoid_index = model.medoid_indices_[0]
-    medoid_profile = daily_cf_matrix.iloc[medoid_index]
-    return medoid_profile
+    model.fit(daily_cf_matrix)                          # Fitting the k-medoids model onto our dataset
+    medoid_index = model.medoid_indices_[0]             # Attribute medoid_indices_ contains the indices (row numbers) of the selected medoids (one for each cluster)
+    medoid_profile = daily_cf_matrix.iloc[medoid_index] # Retrieve the daily cf profile for that medoid day (corresponding to medoid_indices_)
+    medoid_date = daily_cf_matrix.index[medoid_index]   # Get the corresponding date (index label)
+    return medoid_profile, medoid_date
 
-medoid_offshore = compute_medoid(daily_cf_offshore)
-medoid_onshore = compute_medoid(daily_cf_onshore)
-medoid_solar = compute_medoid(daily_cf_solar)
+medoid_offshore, medoid_offshore_date = compute_medoid(daily_cf_offshore)
+medoid_onshore, medoid_onshore_date = compute_medoid(daily_cf_onshore)
+medoid_solar, medoid_solar_date = compute_medoid(daily_cf_solar)
 
 # === Plot results ===
 plt.figure(figsize=(10, 6))
-plt.plot(medoid_offshore.values, label='Offshore Wind')
-plt.plot(medoid_onshore.values, label='Onshore Wind')
-plt.plot(medoid_solar.values, label='Solar')
+plt.plot(medoid_offshore.values, label=f'Offshore Wind ({medoid_offshore_date})')
+plt.plot(medoid_onshore.values, label=f'Onshore Wind ({medoid_onshore_date})')
+plt.plot(medoid_solar.values, label=f'Solar ({medoid_solar_date})')
 plt.xlabel("Hour of Day")
 plt.ylabel("Capacity Factor")
 plt.title("Medoid Daily Capacity Factor Profiles (2021-2024)")
