@@ -43,14 +43,14 @@ Demand_price = pd.DataFrame({d: [round(Demand_price_array[d],2)] * T for d in ra
 Demand_price.columns = range(T)
 Demand_price.index = data.LOADS
 
-Demand_volume = pd.DataFrame({d: [round(data.load_profile[d,t],2) for t in data.TIMES] for d in data.LOADS}).T
-Demand_volume_cumulative = Demand_volume.cumsum(axis=0)
-Demand_volume = Demand_volume_cumulative
+# Demand_volume = pd.DataFrame({d: [round(data.load_profile[d,t],2) for t in data.TIMES] for d in data.LOADS}).T
+# Demand_volume_cumulative = Demand_volume.cumsum(axis=0)
+# Demand_volume = Demand_volume_cumulative
 
-Demand_volume_total = Demand_volume.iloc[-1, :].values
+# Demand_volume_total = Demand_volume.iloc[-1, :].values
 
-max_dem = data.load_capacity
-min_dem = 0
+# max_dem = data.load_capacity
+# min_dem = 0
 
 # Load RES profile
 csv_filename = "medoids_profile_summary--1cluster.csv"
@@ -87,6 +87,17 @@ if season == "Winter":
     RES = RES_winter
 else:
     RES = RES_summer
+
+# == Temporary ==
+# Scale up hourly demand considering new RES data
+load_profile = data.load_profile
+max_RES = np.max(RES)
+new_load_profile = {(d,t): load_profile[d,t]/data.load_capacity*max_RES*0.9 for d in data.LOADS for t in data.TIMES}
+
+Demand_volume = pd.DataFrame({d: [round(new_load_profile[d,t],2) for t in data.TIMES] for d in data.LOADS}).T
+Demand_volume_cumulative = Demand_volume.cumsum(axis=0)
+Demand_volume = Demand_volume_cumulative
+Demand_volume_total = Demand_volume.iloc[-1, :].values
 
 # Compute hourly residual demand (<0 if residual production)
 Residual = -RES + Demand_volume_total
