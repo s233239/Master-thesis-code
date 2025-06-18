@@ -54,7 +54,7 @@ Demand_price.index = data.LOADS
 
 # Load RES profile
 csv_filename = "medoids_profile_summary--1cluster.csv"
-data_dir = r'C:\Users\ppers\OneDrive\Documents\Cours DTU\MASTER THESIS\Codes\Master-thesis-code\data\csv--data_processing-v4'
+data_dir = r'C:\Users\ppers\OneDrive\Documents\Cours DTU\MASTER THESIS\Codes\Master-thesis-code\data\RES\csv--data_processing-v4'
 csv_path = os.path.join(data_dir, csv_filename)
 
 RES_profiles = pd.read_csv(csv_path)
