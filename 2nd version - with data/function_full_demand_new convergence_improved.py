@@ -9,10 +9,12 @@ import numpy as np                    # Numerical operations (similar to Julia b
 from joblib import Parallel, delayed  # For parallel computing (optional alternative: multiprocessing)
 
 import data
+import os
 
 ## --- Initialization of the problem ---
 
 # Set changing parameters
+season = "Summer"           # Modelled season \in {"Winter", "Summer"}
 n_players = 4               # Number of storage players in the Cournot game \in {1, 2, 4, 6, 8}
 factor = 1.4                # Scaling factor for RES production
 alpha_batt = 0.5            # Initial storage level (%)
@@ -51,10 +53,83 @@ max_dem = data.load_capacity
 min_dem = 0
 
 # Load RES profile
-RES = np.array([data.generator_availability['W3'][t] * factor * max_dem for t in range(1,T+1)])
+csv_filename = "medoids_profile_summary--1cluster.csv"
+data_dir = r'C:\Users\ppers\OneDrive\Documents\Cours DTU\MASTER THESIS\Codes\Master-thesis-code\data\csv--data_processing-v4'
+csv_path = os.path.join(data_dir, csv_filename)
+
+RES_profiles = pd.read_csv(csv_path)
+print(RES_profiles)
+
+# RES hourly capacity factors
+offshore_profile_winter = RES_profiles.iloc[0].loc[[f"{i}" for i in temps]].to_numpy()
+onshore_profile_winter = RES_profiles.iloc[2].loc[[f"{i}" for i in temps]].to_numpy()
+solar_profile_winter = RES_profiles.iloc[4].loc[[f"{i}" for i in temps]].to_numpy()
+offshore_profile_summer = RES_profiles.iloc[1].loc[[f"{i}" for i in temps]].to_numpy()
+onshore_profile_summer = RES_profiles.iloc[3].loc[[f"{i}" for i in temps]].to_numpy()
+solar_profile_summer = RES_profiles.iloc[5].loc[[f"{i}" for i in temps]].to_numpy()
+
+# Energy mix: capacity installation plans for 2030 (DEA)
+offshore_capacity = 4900
+onshore_capacity = 4800
+solar_capacity = 5265
+bioenergy_capacity = 557
+
+# Compute RES hourly production = RES cf * cap
+RES_winter = offshore_profile_winter*offshore_capacity + onshore_profile_winter*onshore_capacity + solar_profile_winter*solar_capacity + bioenergy_capacity*1
+RES_summer = offshore_profile_summer*offshore_capacity + onshore_profile_summer*onshore_capacity + solar_profile_summer*solar_capacity + bioenergy_capacity*1
+# As a comparison with previous data:
+# data.generator_availability['W3'][t] = total RES capacity factors
+# * max_dem = maximal demand scaling cf => here corresponding to total RES capacity installed
+# * RES_factor = scaling factor to play with different RES production scenarios => here represented by scenarios
+
+# Choose data corresponding to the chosen scenario
+if season == "Winter":
+    RES = RES_winter
+else:
+    RES = RES_summer
+
+# Compute hourly residual demand (<0 if residual production)
 Residual = -RES + Demand_volume_total
 
 # Plotting
+# == RES scenarios ==
+plt.figure(figsize=(15,8))
+
+plt.subplot(2,2,1)
+plt.plot(temps, RES_winter, label="RES in winter")
+plt.plot(temps, RES_summer, label="RES in summer")
+plt.xlabel("Hour (h)")
+plt.ylabel("Power (MW)")
+plt.title("Renewable Hourly Production Scenarios (Winter vs Summer)")
+plt.legend(loc="upper right")
+plt.grid()
+
+plt.subplot(2,2,2)
+
+
+plt.subplot(2,2,3)
+plt.bar(x=temps, height=bioenergy_capacity, color='gray', align='edge', label="Bioenergy")
+plt.bar(x=temps, height=offshore_profile_winter*offshore_capacity, bottom=bioenergy_capacity, color='darkblue', align='edge', label="Offshore wind")
+plt.bar(x=temps, height=onshore_profile_winter*onshore_capacity, bottom=bioenergy_capacity+offshore_profile_winter*offshore_capacity, color='lightskyblue', align='edge', label="Onshore wind")
+plt.bar(x=temps, height=solar_profile_winter*solar_capacity, bottom=bioenergy_capacity+offshore_profile_winter*offshore_capacity+onshore_profile_winter*onshore_capacity, color='orange', align='edge', label="Solar")
+plt.xlabel("Hour (h)")
+plt.ylabel("Power (MW)")
+plt.title("Renewable Hourly Production Mix in Winter")
+plt.legend(loc="upper right")
+
+plt.subplot(2,2,4)
+plt.bar(x=temps, height=bioenergy_capacity, color='gray', align='edge', label="Bioenergy")
+plt.bar(x=temps, height=offshore_profile_summer*offshore_capacity, bottom=bioenergy_capacity, color='darkblue', align='edge', label="Offshore wind")
+plt.bar(x=temps, height=onshore_profile_summer*onshore_capacity, bottom=bioenergy_capacity+offshore_profile_summer*offshore_capacity, color='lightskyblue', align='edge', label="Onshore wind")
+plt.bar(x=temps, height=solar_profile_summer*solar_capacity, bottom=bioenergy_capacity+offshore_profile_summer*offshore_capacity+onshore_profile_summer*onshore_capacity, color='orange', align='edge', label="Solar")
+plt.xlabel("Hour (h)")
+plt.ylabel("Power (MW)")
+plt.title("Renewable Hourly Production Mix in Summer")
+plt.legend(loc="upper right")
+
+plt.tight_layout()
+
+# == Model characteristics ==
 plt.figure(figsize=(15,8))
 
 plt.subplot(2,2,1)
