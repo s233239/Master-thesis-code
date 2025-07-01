@@ -52,18 +52,23 @@ Demand_price.index = data.LOADS
 # max_dem = data.load_capacity
 # min_dem = 0
 
-# Load RES profile
+## === Load RES profile ===
+# Get directory where the script is located
+script_dir = os.path.dirname(__file__)
+
+# Define from which processed data file scenarios will be considered
 csv_filename = "medoids_profile_summary--1cluster.csv"
+
 data_dir = r'C:\Users\ppers\OneDrive\Documents\Cours DTU\MASTER THESIS\Codes\Master-thesis-code\data\RES\csv--data_processing-v4'
 csv_path = os.path.join(data_dir, csv_filename)
 
 RES_profiles = pd.read_csv(csv_path)
-print(RES_profiles)
 
 # RES hourly capacity factors
 offshore_profile_winter = RES_profiles.iloc[0].loc[[f"{i}" for i in temps]].to_numpy()
 onshore_profile_winter = RES_profiles.iloc[2].loc[[f"{i}" for i in temps]].to_numpy()
 solar_profile_winter = RES_profiles.iloc[4].loc[[f"{i}" for i in temps]].to_numpy()
+
 offshore_profile_summer = RES_profiles.iloc[1].loc[[f"{i}" for i in temps]].to_numpy()
 onshore_profile_summer = RES_profiles.iloc[3].loc[[f"{i}" for i in temps]].to_numpy()
 solar_profile_summer = RES_profiles.iloc[5].loc[[f"{i}" for i in temps]].to_numpy()
