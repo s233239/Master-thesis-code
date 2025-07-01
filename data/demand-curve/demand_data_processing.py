@@ -50,11 +50,11 @@ def cumulative_to_marginal(df):
         df (pd.DataFrame): DataFrame with columns ['Price', 'Marginal'], containing marginal volumes per price step.
     """
     # Calculate marginal volumes from cumulative
-    df = df.copy()
-    df['Marginal'] = df['Volume'].diff(1)
-    df = df[df['Marginal'].notna() & (df['Marginal'] != 0)]
+    df_copy = df.copy()
+    df_copy['Marginal'] = df_copy['Volume'].diff(1)
+    df_copy = df_copy[df_copy['Marginal'].notna() & (df_copy['Marginal'] != 0)]
 
-    return df[['Price', 'Marginal']]
+    return df_copy[['Price', 'Marginal']]
 
 
 def process_merged_demand_curves(file_dk1:str, file_dk2:str, hour:int):
@@ -112,67 +112,71 @@ def load_hourly_demand_curves(file_path:str):
     return hourly_curves
 
 
-# == MAIN == 
-# Get directory path where the script is located
-script_dir = os.path.dirname(__file__)
+# # == MAIN == 
+# # Get directory path where the script is located
+# script_dir = os.path.dirname(__file__)
 
-# Set data file paths
-dk1_summer_file = 'auction_aggregated_curves_dk1_20240710.csv'
-dk1_winter_file = 'auction_aggregated_curves_dk1_20241127.csv'
-dk1_lowload_file = 'auction_aggregated_curves_dk1_20240519.csv'
-dk2_summer_file = 'auction_aggregated_curves_dk2_20240710.csv'
-dk2_winter_file = 'auction_aggregated_curves_dk2_20241127.csv'
-dk2_lowload_file = 'auction_aggregated_curves_dk2_20240519.csv'
+# # Set data file paths
+# dk1_summer_file = 'auction_aggregated_curves_dk1_20240710.csv'
+# dk1_winter_file = 'auction_aggregated_curves_dk1_20241127.csv'
+# dk1_lowload_file = 'auction_aggregated_curves_dk1_20240519.csv'
+# dk2_summer_file = 'auction_aggregated_curves_dk2_20240710.csv'
+# dk2_winter_file = 'auction_aggregated_curves_dk2_20241127.csv'
+# dk2_lowload_file = 'auction_aggregated_curves_dk2_20240519.csv'
 
-# Choose scenario
-# bidding_zone  \in {'dk1', 'dk2'}
-# scenario      \in {'winter', 'summer', 'lowload'}
-csv_filename = dk2_winter_file
-label = "DK2 Winter"
+# # Choose scenario
+# # bidding_zone  \in {'dk1', 'dk2'}
+# # scenario      \in {'winter', 'summer', 'lowload'}
+# csv_filename = dk2_winter_file
+# label = "DK2 Winter"
 
-# Build relative path to CSV file in the same folder
-csv_path = os.path.join(script_dir, csv_filename)
+# # Build relative path to CSV file in the same folder
+# csv_path = os.path.join(script_dir, csv_filename)
 
-# If merging bidding zones DK1 and DK2
-csv_filename2 = dk1_winter_file
-label = "DK Winter"
-csv_path2 = os.path.join(script_dir, csv_filename2)
+# # # If merging bidding zones DK1 and DK2
+# # csv_filename2 = dk1_winter_file
+# # label = "DK Winter"
+# # csv_path2 = os.path.join(script_dir, csv_filename2)
 
-# Get aggregated demand curve for all hours
-plt.figure(figsize=(10, 6))
-plt.subplot(1,2,1)
+# # Get aggregated demand curve for all hours
+# plt.figure(figsize=(12, 6))
+# plt.subplot(1,2,1)
 
-inflexible_demand = []
-total_demand = []
-for h in range(24):
-    # Load for one bidding zone, one scenario, one hour
-    # demand_curve = process_hourly_demand_curve(csv_path, hour=h)
+# inflexible_demand = []
+# total_demand = []
 
-    # Load for two merged bidding zones, one scenario, one hour
-    demand_curve = process_merged_demand_curves(csv_path, csv_path2, hour=h)
+# # hours_to_plot = [0,5,6,12,13,14,18,19,20,23]
+# hours_to_plot = range(24)
 
-    inflexible_demand.append(demand_curve['Volume'][1])     # First row (Price == 4000)
-    total_demand.append(demand_curve.iloc[-1]['Volume'])    # Last row (Accumulated volume)
+# for h in hours_to_plot:
+#     # Load for one bidding zone, one scenario, one hour
+#     demand_curve = process_hourly_demand_curve(csv_path, hour=h)
 
-    # Plot
-    plt.step(demand_curve['Volume'], demand_curve['Price'], label=f'{h:02}:00')
+#     # Load for two merged bidding zones, one scenario, one hour
+#     # demand_curve = process_merged_demand_curves(csv_path, csv_path2, hour=h)
+
+#     inflexible_demand.append(demand_curve['Volume'][1])     # First row (Price == 4000)
+#     total_demand.append(demand_curve.iloc[-1]['Volume'])    # Last row (Accumulated volume)
+
+#     # Plot
+#     plt.step(demand_curve['Volume'], demand_curve['Price'], label=f'{h:02}:00')
     
-plt.xlabel('Cumulative Volume (MW)')
-plt.ylabel('Price (€/MWh)')
-plt.title(f'Demand Curve of {label} scenario')
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
+# plt.xlabel('Cumulative Volume (MW)')
+# plt.ylabel('Price (€/MWh)')
+# plt.title(f'Demand Curve of {label} scenario')
+# plt.grid(True)
+# plt.legend()
+# plt.tight_layout()
 
-# Plot the demand over time in the day
-plt.subplot(1,2,2)
-plt.plot(range(24), inflexible_demand, label="Inflexible Demand")
-plt.plot(range(24), total_demand, label="Total Demand")
-plt.xlabel('Time (h)')
-plt.ylabel('Volume (MW)')
-plt.title(f'Demand Over Time for {label} scenario')
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
+# # Plot the demand over time in the day
+# plt.subplot(1,2,2)
+# plt.plot(hours_to_plot, inflexible_demand, label="Inflexible Demand")
+# plt.plot(hours_to_plot, total_demand, label="Total Demand")
+# plt.xlabel('Time (h)')
+# plt.ylabel('Volume (MW)')
+# plt.title(f'Demand Over Time for {label} scenario')
+# plt.grid(True)
+# plt.legend()
+# plt.tight_layout()
 
-plt.show()
+# plt.show()

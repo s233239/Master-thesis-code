@@ -15,17 +15,17 @@ Processes:
     Input CSV files must be placed in the script directory with predefined names.
 
 ## Outputs:
-    CSV files 'demand_price-\<Zone>\<Scenario>.csv' and 'demand_volume-\<Zone>\<Scenario>.csv'
-    for each bidding zone and scenario, containing reduced demand price and volume data.
+    CSV files 'demand_price-\<Zone>\<Scenario>-\<N>steps.csv' and 'demand_volume-\<Zone>\<Scenario>-\<N>steps.csv'
+    for each bidding zone and scenario, containing approximated demand price and volume data.
 """
 
 import os
-from demand_data_processing import process_hourly_demand_curve, load_hourly_demand_curves
+from demand_data_processing import load_hourly_demand_curves
 from demand_data_processing_step2 import reduce_demand_curves
 
 # == MAIN == 
 # **Parameter to change if needed**
-N = 50
+N = 20
 
 # Get directory path where the script is located
 script_dir = os.path.dirname(__file__)
@@ -68,9 +68,9 @@ for scenario, scenario_files in data_scenario_files.items():
         # Increment the final dictionnary
         # demand_data[label] = (demand_price, demand_volume)
 
-        # Save demand data for future uses
-        demand_price.to_csv(f'demand_price-{label}.csv')
-        demand_volume.to_csv(f'demand_volume-{label}.csv')
+        # Save demand data as csv files
+        demand_price.to_csv(f'demand_price-{label}-{N}steps.csv')
+        demand_volume.to_csv(f'demand_volume-{label}-{N}steps.csv')
 
 
 

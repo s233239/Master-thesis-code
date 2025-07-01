@@ -10,22 +10,26 @@ Plots the before/after reduction.
 
 import pandas as pd
 import numpy as np
-from sklearn_extra.cluster import KMedoids
+from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 import os
+os.environ["OMP_NUM_THREADS"] = "2"
 
-from demand_data_processing import cumulative_to_marginal
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*KMeans is known to have a memory leak.*")
+
+from demand_data_processing import cumulative_to_marginal, load_hourly_demand_curves
 
 
 def reduce_demand_curves(demand_dict:dict, N:int):
     """
-    Reduces stepwise hourly demand curves to N representative steps using weighted k-medoids clustering.
+    Reduces stepwise hourly demand curves to N representative steps using weighted K-Means clustering algorithm.
+    Returns the desired input for optimization model as 2 dataframes for Price and Volume.
 
     The function performs the following:
-    - Separates the step at price = 4000 and keeps it as a fixed, unclustered step (if present).
-    - For all other steps, uses price as clustering variable.
-    - Volumes are used as weights by repeating each price proportionally to its volume (rounded).
-    - Applies k-medoids clustering to group price steps into N-1 clusters (excluding the fixed 4000 step).
+    - Separates the bids at price = 4000 and keeps it as a fixed, unclustered step (if present).
+    - For all other steps, uses price as clustering variable. Volumes are used as weights.
+    - Applies K-Means clustering to price steps into N-1 clusters (excluding the fixed 4000 step).
     - Aggregates volumes within each cluster.
     - Sorts the resulting steps in descending order of price.
 
@@ -52,6 +56,7 @@ def reduce_demand_curves(demand_dict:dict, N:int):
     for hour, df in demand_dict.items():
         # Replace cumulative volumes to marginal ones in the dataframe
         adapted_df = cumulative_to_marginal(df)
+        adapted_df = adapted_df[adapted_df['Marginal'] > 0]  # filter out 0-volume steps
         
         # Divide the demand data into 1 cluster for price 4000 / and the rest
         high_price_mask = adapted_df['Price'] == 4000   # boolean mask, same length as adapted_df
@@ -59,25 +64,27 @@ def reduce_demand_curves(demand_dict:dict, N:int):
         cluster_df = adapted_df[~high_price_mask]
 
         # Extract arrays
-        prices = cluster_df['Price'].values
-        volumes = cluster_df['Marginal'].values
+        prices = cluster_df['Price'].to_numpy()
+        volumes = cluster_df['Marginal'].to_numpy()
 
-        # Apply k-medoids on prices
+        # Run K-Means clustering algorithm
         if len(prices) < N:
             # Not enough points to cluster; just return original - exception case but assumed to never happen
             reduced_prices = prices
             reduced_volumes = volumes
             print("Not enough data points.")
-
         else:
-            # Repeat prices according to volume (rounded) for weighted k-medoids clustering
-            weights = np.round(volumes).astype(int)
-            expanded_prices = np.repeat(prices, weights).reshape(-1, 1)
+            prices_reshaped = prices.reshape(-1, 1)
 
-            # Run k-medoids clustering algorithm
-            kmedoids = KMedoids(n_clusters=N-1, random_state=0).fit(expanded_prices)
-            labels = kmedoids.predict(prices.reshape(-1, 1))
-            medoids = kmedoids.cluster_centers_.flatten()
+            kmeans = KMeans(n_clusters=N-1, n_init=10, random_state=0)
+            kmeans.fit(prices_reshaped, sample_weight=volumes)
+            labels = kmeans.labels_
+            centroids = kmeans.cluster_centers_.flatten()
+
+            # Check for empty clusters / warnings for cluster count
+            unique_labels = np.unique(labels)
+            if len(unique_labels) < N - 1:
+                print(f"Warning: Only {len(unique_labels)} clusters found instead of {N-1}")
 
             # Aggregate volumes per medoid cluster
             reduced_prices = []
@@ -85,11 +92,11 @@ def reduce_demand_curves(demand_dict:dict, N:int):
             for i in range(N-1):
                 cluster_mask = labels == i
                 cluster_volume = volumes[cluster_mask].sum()    # works because volumes are marginals
-                cluster_price = medoids[i]
+                cluster_price = centroids[i]
                 reduced_prices.append(cluster_price)
                 reduced_volumes.append(cluster_volume)
             
-        # Add the fixed 4000-price point
+        # Add the fixed 4000-price cluster
         if not fixed_df.empty:
             reduced_prices.append(4000)
             reduced_volumes.append(fixed_df['Marginal'].sum())
@@ -98,7 +105,7 @@ def reduce_demand_curves(demand_dict:dict, N:int):
         sorted_idx = np.argsort(reduced_prices)[::-1]
         demand_price[hour] = np.array(reduced_prices)[sorted_idx]
 
-        # Convert marginal volumes to cumulative volumes
+        # Convert back marginal volumes to cumulative volumes
         marginal_sorted = np.array(reduced_volumes)[sorted_idx]
         demand_volume[hour] = np.cumsum(marginal_sorted)
 
@@ -110,28 +117,64 @@ def reduce_demand_curves(demand_dict:dict, N:int):
     return demand_price, demand_volume
 
 
-
 def plot_reduction(demand_dict, reduced_price_df, reduced_volume_df, hours_to_plot):
+
+    # Create a subplot
+    n_plots = len(hours_to_plot)
+    cols = np.ceil(np.sqrt(n_plots)).astype(int)
+    rows = np.ceil(n_plots / cols).astype(int)
+
+    fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3*rows))
+    np.array(axes).flatten()
+
     for hour in hours_to_plot:
         df = demand_dict[hour]
-        prices = df['Price'].values
-        volumes = df['Volume'].values
+        prices = df['Price'].to_numpy()
+        volumes = df['Volume'].to_numpy()
 
-        red_prices = reduced_price_df[hour].dropna().values
-        red_volumes = reduced_volume_df[hour].dropna().values
+        red_prices = reduced_price_df[hour].to_numpy()
+        red_volumes = reduced_volume_df[hour].to_numpy()
 
-        plt.figure(figsize=(6, 4))
-        plt.step(prices, volumes, where='post', label='Original', alpha=0.6)
-        plt.step(red_prices, red_volumes, where='post', label='Reduced', color='r', linewidth=2)
+        plt.subplot(rows, cols, hours_to_plot.index(hour)+1)
+        plt.step(np.insert(volumes, 0, 0), np.insert(prices, 0, prices[0]), label='Original', alpha=0.8)
+        plt.step(np.insert(red_volumes, 0, 0), np.insert(red_prices, 0, red_prices[0]), label='Reduced', color='r')
         plt.title(f'Demand Curve - Hour {hour}')
         plt.xlabel('Price')
         plt.ylabel('Volume')
         plt.legend()
         plt.grid(True)
-        plt.tight_layout()
-        plt.show()
+    
+    plt.tight_layout()
+    plt.show()
+
+    return
 
 
 
-# reduced_price_df, reduced_volume_df = reduce_demand_curves_weighted(demand_dict, N=5)
-# plot_reduction(demand_dict, reduced_price_df, reduced_volume_df, hours_to_plot=[7, 13, 18])
+# # == MAIN == 
+# # Get directory path where the script is located
+# script_dir = os.path.dirname(__file__)
+
+# # Set data file paths
+# dk1_summer_file = 'auction_aggregated_curves_dk1_20240710.csv'
+# dk1_winter_file = 'auction_aggregated_curves_dk1_20241127.csv'
+# dk1_lowload_file = 'auction_aggregated_curves_dk1_20240519.csv'
+# dk2_summer_file = 'auction_aggregated_curves_dk2_20240710.csv'
+# dk2_winter_file = 'auction_aggregated_curves_dk2_20241127.csv'
+# dk2_lowload_file = 'auction_aggregated_curves_dk2_20240519.csv'
+
+# # Choose scenario
+# # bidding_zone  \in {'dk1', 'dk2'}
+# # scenario      \in {'winter', 'summer', 'lowload'}
+# csv_filename = dk2_winter_file
+# label = "DK2 Winter"
+
+# # Build relative path to CSV file in the same folder
+# csv_path = os.path.join(script_dir, csv_filename)
+
+# # Get aggregated demand curve for all hours
+# price_demand_curves = load_hourly_demand_curves(csv_path)
+    
+# # Test the processing functions
+# reduced_price_df, reduced_volume_df = reduce_demand_curves(price_demand_curves, N=20)
+# plot_reduction(price_demand_curves, reduced_price_df, reduced_volume_df, hours_to_plot=[0, 7, 13, 18])

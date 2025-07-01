@@ -5,7 +5,7 @@ Season = ['Winter', 'Spring', 'Summer', 'Autumn']
 
 Plots these season profiles for each RES capacity factor.
 Exports results as csv (optional): 
-    - medoids profiles for a given RES
+    - k medoids profiles for each RES, season
     - day-to-cluster assignments: index is the date, column values are the
     assigned cluster for each RES
 This enables to observe and analyse the cluster mapping over time. 
