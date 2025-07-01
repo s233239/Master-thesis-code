@@ -1,9 +1,9 @@
 """
 Functions:
-process_hourly_demand_curve, load_demand_curve, load_merged_demand_curve, load_hourly_demand_curves
+process_hourly_demand_curve, process_merged_demand_curves, load_hourly_demand_curves
 
 Main:
-Loads the demand curves from one scenario and plots the output.
+Loads the hourly demand curves from one scenario and plots the output.
 """
 
 import pandas as pd
@@ -11,16 +11,17 @@ import matplotlib.pyplot as plt
 import os
 
 # == FUNCTIONS ==
-def process_hourly_demand_curve(file_path, hour):
+def process_hourly_demand_curve(file_path:str, hour:int):
     """
-    Processes the demand curve data for a given file and hour.
+    Processes the CSV spot market file and returns the aggregated demand curve
+    for a given hour.
     
     Parameters:
-    - file_path: str, path to CSV - assumed to contain data for a single day and bidding zone
-    - hour: int, hour from 0 to 23
+        file_path (str): path to CSV file - assumed to contain data for a single day and bidding zone
+        hour (int): hour of the day (0-23)
     
     Returns:
-    - pd.DataFrame with ['Price', 'Volume'] for the given hour
+        pd.DataFrame with columns ['Price', 'Volume'] for the given hour, representing the aggregated demand curve
     """
     # Load and clean
     bids = pd.read_csv(file_path, skiprows=1)
@@ -31,80 +32,81 @@ def process_hourly_demand_curve(file_path, hour):
     
     # Filter for demand (Purchase) and sort by price descending (economic merit order)
     demand_bids = hourly_bids[hourly_bids['Sale/Purchase'] == 'Purchase'].sort_values(by='Price', ascending=False)
-    
-    # Aggregate: keep cumulative demand as price increases
-    demand_bids = demand_bids[['Price', 'Volume']].reset_index(drop=True)
 
-    return demand_bids
+    # Final aggregated demand curve
+    aggregated_curve = demand_bids[['Price', 'Volume']].reset_index(drop=True)
 
-
-def load_demand_curve(file_path, hour):
-    """
-    Processes the CSV spot market file and returns the aggregated demand curve
-    for a given hour (0-23).
-
-    Parameters:
-    - file_path: str, path to the CSV file - assumed to contain data for a single day and bidding zone
-    - hour: int, hour of the day (0-23)
-
-    Returns:
-    - pd.DataFrame with columns ['Price', 'Volume'], representing the aggregated demand curve
-    """
-    # Process file
-    demand_bids = process_hourly_demand_curve(file_path, hour)
-
-    # Build final aggregated demand curve
-    demand_bids['CumulativeVolume'] = demand_bids['Volume'].cumsum()
-    aggregated_curve = demand_bids[['Price', 'CumulativeVolume']].rename(columns={'CumulativeVolume': 'Volume'})
-    
     return aggregated_curve
 
 
-def load_merged_demand_curve(file_dk1, file_dk2, hour):
+def cumulative_to_marginal(df):
     """
-    Loads and merges demand curves for DK1 and DK2 for a given hour.
+    Converts a cumulative volume curve to a marginal (stepwise) volume curve.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame with columns ['Price', 'Volume'], where 'Volume' is cumulative.
+
+    Returns:
+        df (pd.DataFrame): DataFrame with columns ['Price', 'Marginal'], containing marginal volumes per price step.
+    """
+    # Calculate marginal volumes from cumulative
+    df = df.copy()
+    df['Marginal'] = df['Volume'].diff(1)
+    df = df[df['Marginal'].notna() & (df['Marginal'] != 0)]
+
+    return df[['Price', 'Marginal']]
+
+
+def process_merged_demand_curves(file_dk1:str, file_dk2:str, hour:int):
+    """
+    Processes DK1 and DK2 CSV spot market files for a given hour. Loads and merges demand curves. 
+    Returns the aggregated demand curve.
     
     Parameters:
-    - file_dk1: str, path to DK1 CSV file
-    - file_dk2: str, path to DK2 CSV file
-    - hour: int, hour of the day (0-23)
+        file_dk1 (str): path to DK1 CSV file
+        file_dk2 (str): path to DK2 CSV file
+        hour (int): hour of the day (0-23)
     
     Returns:
-    - pd.DataFrame with columns ['Price', 'Volume'], representing the merged aggregated demand curve
+        pd.DataFrame with columns ['Price', 'Volume'] for the given hour, representing the merged aggregated demand curve
     """
-    # Process both zones
+
+    # Load and convert the demand curve for each bidding zone
     demand_dk1 = process_hourly_demand_curve(file_dk1, hour)
     demand_dk2 = process_hourly_demand_curve(file_dk2, hour)
+    demand_dk1_marg = cumulative_to_marginal(demand_dk1)
+    demand_dk2_marg = cumulative_to_marginal(demand_dk2)
 
-    # Combine and group by price (to handle duplicate prices across zones)
-    combined = pd.concat([demand_dk1, demand_dk2], ignore_index=True)
+    # Combine **marginal** volumes and group by marginal price (to handle duplicate prices across zones)
+    combined = pd.concat([demand_dk1_marg, demand_dk2_marg], ignore_index=True)
     combined_grouped = combined.groupby('Price', as_index=False).sum()
     combined_sorted = combined_grouped.sort_values(by='Price', ascending=False).reset_index(drop=True)
 
-    # Build final aggregated demand curve
-    combined_sorted['CumulativeVolume'] = combined_sorted['Volume'].cumsum()
+    # Build final aggregated demand curve by recomputing cumulative volume
+    combined_sorted['CumulativeVolume'] = combined_sorted['Marginal'].cumsum()
     aggregated_curve = combined_sorted[['Price', 'CumulativeVolume']].rename(columns={'CumulativeVolume': 'Volume'})
+
+    # Add the initial row for the stepwise demand curve to begin at volume 0
+    new_row = pd.DataFrame({'Price': [4000], 'Volume': [0]})
+    aggregated_curve = pd.concat([new_row, aggregated_curve], ignore_index=True)
     
     return aggregated_curve
 
 
-def load_hourly_demand_curves(file_path):
+def load_hourly_demand_curves(file_path:str):
     """
     Processes a full day's demand bids into a dictionary of hourly demand curves.
     
     Parameters:
-    - file_path: str, path to the CSV file
-    - zone_label: optional str, used as a label in the dictionary (for identification)
+        file_path (str): path to the CSV file
 
     Returns:
-    - dict: keys = hour (int from 0 to 23), values = pd.DataFrame with ['Price', 'Volume']
+        dict: keys = hour (int from 0 to 23), values = pd.DataFrame with ['Price', 'Volume']
     """
     hourly_curves = {}
 
     for h in range(24):
-        demand_bids = process_hourly_demand_curve(file_path, hour=h)
-        demand_bids['CumulativeVolume'] = demand_bids['Volume'].cumsum()
-        curve = demand_bids[['Price', 'CumulativeVolume']].rename(columns={'CumulativeVolume': 'Volume'})
+        curve = process_hourly_demand_curve(file_path, hour=h)
         hourly_curves[h] = curve
 
     return hourly_curves
@@ -132,26 +134,45 @@ label = "DK2 Winter"
 csv_path = os.path.join(script_dir, csv_filename)
 
 # If merging bidding zones DK1 and DK2
-# csv_filename2 = dk1_winter_file
-# label = "DK Winter"
-# csv_path2 = os.path.join(script_dir, csv_filename2)
+csv_filename2 = dk1_winter_file
+label = "DK Winter"
+csv_path2 = os.path.join(script_dir, csv_filename2)
 
 # Get aggregated demand curve for all hours
 plt.figure(figsize=(10, 6))
+plt.subplot(1,2,1)
+
+inflexible_demand = []
+total_demand = []
 for h in range(24):
     # Load for one bidding zone, one scenario, one hour
-    demand_curve = load_demand_curve(csv_path, hour=h)
+    # demand_curve = process_hourly_demand_curve(csv_path, hour=h)
 
     # Load for two merged bidding zones, one scenario, one hour
-    # demand_curve = load_merged_demand_curve(csv_path, csv_path2, hour=h)
+    demand_curve = process_merged_demand_curves(csv_path, csv_path2, hour=h)
+
+    inflexible_demand.append(demand_curve['Volume'][1])     # First row (Price == 4000)
+    total_demand.append(demand_curve.iloc[-1]['Volume'])    # Last row (Accumulated volume)
 
     # Plot
-    plt.plot(demand_curve['Volume'], demand_curve['Price'], label=f'{label} - {h:02}:00')
+    plt.step(demand_curve['Volume'], demand_curve['Price'], label=f'{h:02}:00')
     
 plt.xlabel('Cumulative Volume (MW)')
 plt.ylabel('Price (€/MWh)')
-plt.title('Demand Curve')
-plt.legend()
+plt.title(f'Demand Curve of {label} scenario')
 plt.grid(True)
+plt.legend()
 plt.tight_layout()
+
+# Plot the demand over time in the day
+plt.subplot(1,2,2)
+plt.plot(range(24), inflexible_demand, label="Inflexible Demand")
+plt.plot(range(24), total_demand, label="Total Demand")
+plt.xlabel('Time (h)')
+plt.ylabel('Volume (MW)')
+plt.title(f'Demand Over Time for {label} scenario')
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+
 plt.show()
