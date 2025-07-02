@@ -1,2 +1,0 @@
-# Master thesis code
- 
