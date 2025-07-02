@@ -27,6 +27,7 @@ def reduce_demand_curves(demand_dict:dict, N:int):
     Returns the desired input for optimization model as 2 dataframes for Price and Volume.
 
     The function performs the following:
+    - Removes all price negative bids.
     - Separates the bids at price = 4000 and keeps it as a fixed, unclustered step (if present).
     - For all other steps, uses price as clustering variable. Volumes are used as weights.
     - Applies K-Means clustering to price steps into N-1 clusters (excluding the fixed 4000 step).
@@ -51,11 +52,15 @@ def reduce_demand_curves(demand_dict:dict, N:int):
     """
 
     demand_price = pd.DataFrame(columns=range(24))
-    demand_volume = pd.DataFrame(columns=range(24))
+    demand_volume = pd.DataFrame(columns=range(24))    
 
     for hour, df in demand_dict.items():
+        # Remove all price negative bids from the demand curve data
+        filtered_df = df[df['Price'] >= 0].copy()
+        demand_dict[hour] = filtered_df
+
         # Replace cumulative volumes to marginal ones in the dataframe
-        adapted_df = cumulative_to_marginal(df)
+        adapted_df = cumulative_to_marginal(filtered_df)
         adapted_df = adapted_df[adapted_df['Marginal'] > 0]  # filter out 0-volume steps
         
         # Divide the demand data into 1 cluster for price 4000 / and the rest
