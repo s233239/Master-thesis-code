@@ -45,7 +45,7 @@ dk2_lowload_file = 'auction_aggregated_curves_dk2_20240519.csv'
 data_scenario_files = {
     "Summer": (dk1_summer_file, dk2_summer_file),
     "Winter": (dk1_winter_file, dk2_winter_file),
-    "Low load": (dk1_lowload_file, dk2_lowload_file)
+    "LowLoad": (dk1_lowload_file, dk2_lowload_file)
     }
 bidding_zones = ["DK1", "DK2"]
 
@@ -71,6 +71,8 @@ for scenario, scenario_files in data_scenario_files.items():
         # Save demand data as csv files
         demand_price.to_csv(f'demand_price-{label}-{N}steps.csv')
         demand_volume.to_csv(f'demand_volume-{label}-{N}steps.csv')
+        
+print("All CSV files have been correctly exported into demand price and demand volume files for each scenario.")
 
 
 
