@@ -8,20 +8,21 @@ import numpy as np                    # Numerical operations (similar to Julia b
 
 from joblib import Parallel, delayed  # For parallel computing (optional alternative: multiprocessing)
 
-import data
+from new_data import load_price_demand_curve_data, fig_demand_over_time
 import os
 
 ## --- Initialization of the problem ---
 
 # Set changing parameters
-season = "Summer"           # Modelled season \in {"Winter", "Summer"}
+season = "Winter"           # Modelled season \in {"Winter", "Summer", "LowLoad"}
+bidding_zone = "DK2"        # Modelled Denmark bidding zone \in {"DK1", "DK2"}
 n_players = 4               # Number of storage players in the Cournot game \in {1, 2, 4, 6, 8}
-factor = 1.4                # Scaling factor for RES production
 alpha_batt = 0.5            # Initial storage level (%)
 min_eta = 0.85              # Minimal storage round-trip efficiency
 OC_default = 5              # Default storage operating cost
 storage_Crate_default = 0.5 # Charge/discharge rate relative to energy capacity. A 1C battery can discharge fully in 1 hour.
 N = 10                      # Discretization number for power outputs
+D = 20                      # Discretization number for price demand curve steps
 tol = 1e-5                  # Nash equilibrium tolerance parameter
 max_iter = 100              # Nash equilibrium maximum iteration number
 
@@ -34,30 +35,19 @@ epsilon = 1e-5
 T = 24              # number of time periods
 temps = range(T)    # time periods iterable
 
-# Load demand curves
-D = len(data.LOADS) # number of loads (10)
+## === Load price demand curves ===
+Demand_price, Demand_volume = load_price_demand_curve_data(bidding_zone=bidding_zone, time_period=season, demand_step_numbers=D)
 
-# Demand_price = pd.DataFrame({d: [round(data.load_bids[d],2)] * T for d in data.LOADS}).T
-Demand_price_array = np.sort(np.random.rand(D))[::-1] * data.load_cost
-Demand_price = pd.DataFrame({d: [round(Demand_price_array[d],2)] * T for d in range(D)}).T
-Demand_price.columns = range(T)
-Demand_price.index = data.LOADS
+# Compute relative parameters
+Demand_volume_total = Demand_volume.loc[D-1].to_numpy()   # Last row (Total accumulated volume)
 
-# Demand_volume = pd.DataFrame({d: [round(data.load_profile[d,t],2) for t in data.TIMES] for d in data.LOADS}).T
-# Demand_volume_cumulative = Demand_volume.cumsum(axis=0)
-# Demand_volume = Demand_volume_cumulative
-
-# Demand_volume_total = Demand_volume.iloc[-1, :].values
-
-# max_dem = data.load_capacity
-# min_dem = 0
 
 ## === Load RES profile ===
 # Get directory where the script is located
 script_dir = os.path.dirname(__file__)
 
 # Define from which processed data file scenarios will be considered
-csv_filename = "medoids_profile_summary--1cluster.csv"
+csv_filename = "medoids_profile_summary--2cluster.csv"
 
 data_dir = r'C:\Users\ppers\OneDrive\Documents\Cours DTU\MASTER THESIS\Codes\Master-thesis-code\data\RES\csv--data_processing-v4'
 csv_path = os.path.join(data_dir, csv_filename)
@@ -65,13 +55,13 @@ csv_path = os.path.join(data_dir, csv_filename)
 RES_profiles = pd.read_csv(csv_path)
 
 # RES hourly capacity factors
-offshore_profile_winter = RES_profiles.iloc[0].loc[[f"{i}" for i in temps]].to_numpy()
-onshore_profile_winter = RES_profiles.iloc[2].loc[[f"{i}" for i in temps]].to_numpy()
-solar_profile_winter = RES_profiles.iloc[4].loc[[f"{i}" for i in temps]].to_numpy()
+offshore_profile_winter = RES_profiles.iloc[1].loc[[f"{i}" for i in temps]].to_numpy()
+onshore_profile_winter = RES_profiles.iloc[4].loc[[f"{i}" for i in temps]].to_numpy()
+solar_profile_winter = RES_profiles.iloc[8].loc[[f"{i}" for i in temps]].to_numpy()
 
-offshore_profile_summer = RES_profiles.iloc[1].loc[[f"{i}" for i in temps]].to_numpy()
-onshore_profile_summer = RES_profiles.iloc[3].loc[[f"{i}" for i in temps]].to_numpy()
-solar_profile_summer = RES_profiles.iloc[5].loc[[f"{i}" for i in temps]].to_numpy()
+offshore_profile_summer = RES_profiles.iloc[3].loc[[f"{i}" for i in temps]].to_numpy()
+onshore_profile_summer = RES_profiles.iloc[6].loc[[f"{i}" for i in temps]].to_numpy()
+solar_profile_summer = RES_profiles.iloc[10].loc[[f"{i}" for i in temps]].to_numpy()
 
 # Energy mix: capacity installation plans for 2030 (DEA)
 offshore_capacity = 4900
@@ -93,51 +83,38 @@ if season == "Winter":
 else:
     RES = RES_summer
 
-# == Temporary ==
-# Scale up hourly demand considering new RES data
-load_profile = data.load_profile
-max_RES = np.max(RES)
-new_load_profile = {(d,t): load_profile[d,t]/data.load_capacity*max_RES*0.9 for d in data.LOADS for t in data.TIMES}
 
-Demand_volume = pd.DataFrame({d: [round(new_load_profile[d,t],2) for t in data.TIMES] for d in data.LOADS}).T
-Demand_volume_cumulative = Demand_volume.cumsum(axis=0)
-Demand_volume = Demand_volume_cumulative
-Demand_volume_total = Demand_volume.iloc[-1, :].values
+## === Plotting ===
+# RES scenarios 
+plt.figure(figsize=(10, 6))
 
-# Compute hourly residual demand (<0 if residual production)
-Residual = -RES + Demand_volume_total
+# plt.plot(temps, RES_winter, label="RES in winter")
+# plt.plot(temps, RES_summer, label="RES in summer")
+# plt.xlabel("Hour (h)")
+# plt.ylabel("Power (MW)")
+# plt.title("Renewable Hourly Production Scenarios (Winter vs Summer)")
+# plt.legend(loc="upper right")
+# plt.grid()
 
-# Plotting
-# == RES scenarios ==
-plt.figure(figsize=(15,8))
-
-plt.subplot(2,2,1)
-plt.plot(temps, RES_winter, label="RES in winter")
-plt.plot(temps, RES_summer, label="RES in summer")
-plt.xlabel("Hour (h)")
-plt.ylabel("Power (MW)")
-plt.title("Renewable Hourly Production Scenarios (Winter vs Summer)")
-plt.legend(loc="upper right")
-plt.grid()
-
-plt.subplot(2,2,2)
-
-
-plt.subplot(2,2,3)
+plt.subplot(1,2,1)
 plt.bar(x=temps, height=bioenergy_capacity, color='gray', align='edge', label="Bioenergy")
 plt.bar(x=temps, height=offshore_profile_winter*offshore_capacity, bottom=bioenergy_capacity, color='darkblue', align='edge', label="Offshore wind")
 plt.bar(x=temps, height=onshore_profile_winter*onshore_capacity, bottom=bioenergy_capacity+offshore_profile_winter*offshore_capacity, color='lightskyblue', align='edge', label="Onshore wind")
 plt.bar(x=temps, height=solar_profile_winter*solar_capacity, bottom=bioenergy_capacity+offshore_profile_winter*offshore_capacity+onshore_profile_winter*onshore_capacity, color='orange', align='edge', label="Solar")
+plt.plot(temps, RES_winter, label="RES in winter", linestyle='--', color='black', alpha=0.2)
+plt.plot(temps, RES_summer, label="RES in summer", linestyle='--', color='black')
 plt.xlabel("Hour (h)")
 plt.ylabel("Power (MW)")
 plt.title("Renewable Hourly Production Mix in Winter")
 plt.legend(loc="upper right")
 
-plt.subplot(2,2,4)
+plt.subplot(1,2,2)
 plt.bar(x=temps, height=bioenergy_capacity, color='gray', align='edge', label="Bioenergy")
 plt.bar(x=temps, height=offshore_profile_summer*offshore_capacity, bottom=bioenergy_capacity, color='darkblue', align='edge', label="Offshore wind")
 plt.bar(x=temps, height=onshore_profile_summer*onshore_capacity, bottom=bioenergy_capacity+offshore_profile_summer*offshore_capacity, color='lightskyblue', align='edge', label="Onshore wind")
 plt.bar(x=temps, height=solar_profile_summer*solar_capacity, bottom=bioenergy_capacity+offshore_profile_summer*offshore_capacity+onshore_profile_summer*onshore_capacity, color='orange', align='edge', label="Solar")
+plt.plot(temps, RES_winter, label="RES in winter", linestyle='--', color='black')
+plt.plot(temps, RES_summer, label="RES in summer", linestyle='--', color='black', alpha=0.2)
 plt.xlabel("Hour (h)")
 plt.ylabel("Power (MW)")
 plt.title("Renewable Hourly Production Mix in Summer")
@@ -145,8 +122,11 @@ plt.legend(loc="upper right")
 
 plt.tight_layout()
 
-# == Model characteristics ==
-plt.figure(figsize=(15,8))
+# Model characteristics
+# Compute hourly residual demand (<0 if residual production)
+Residual = -RES + Demand_volume_total
+
+plt.figure(figsize=(15,7))
 
 plt.subplot(2,2,1)
 for t in temps:
@@ -220,7 +200,7 @@ PowerRating_available = Capacity_req * storage_Crate_default
 
 
 # Plotting
-fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
 x = range(T+1)
 
 # Plot 1: Residual and Residual Corrected
@@ -599,20 +579,22 @@ SW = sum(CS) + sum(PS)
 
 
 ## --- Plots ---
-plt.figure(figsize=(15,8))
+plt.figure(figsize=(15,7))
 temps_np = np.array(temps)
 temps_with_zero_np = np.array([t for t in temps] + [T])
 
 # 1. Market Price Plot
 plt.subplot(2,2,1)
 
-values_to_show = [p for p in market_price if p > 0]
+values_to_show = [round(p,1) for p in market_price if p > 0]
+values_to_show.sort()
+values_to_show_filtered = [x for i, x in enumerate(values_to_show) if i == 0 or abs(x - values_to_show[i-1]) >= 2]
 
 for player in range(n_players):
     plt.step(temps_np, output[player][3], where='post')
-for p in values_to_show:
+for p in values_to_show_filtered:
     plt.axhline(y=p, linestyle='--', color='gray', linewidth=1)
-    plt.text(x=temps_np[-1]+1.5, y=p + 0.5, s=f'y = {p}', color='black', ha='left', va='bottom')
+    plt.text(x=temps_np[-1]+1.5, y=p, s=f'y = {p}', color='black', ha='left', va='bottom')
 plt.xlabel("Time (h)")
 plt.ylabel("Market Price (€/MWh)")
 plt.title("Market Price Over Time")
@@ -637,15 +619,23 @@ plt.title("Market Clearing: Supply vs Demand Over Time")
 # 3. Summary Bars for Unmet Demand, Curtailment and Market Metrics
 ax1 = plt.subplot(2,2,3)
 
+def engineering_notation(x, precision=3):
+    if x == 0:
+        return f"0"
+    exponent = int(np.floor(np.log10(abs(x)) // 3 * 3))
+    mantissa = x / (10 ** exponent)
+    return f"{mantissa:.{precision}g}e{exponent}"
+
 # --- Ax1: Energy metrics ---
 ax1_labels = ["Unmet Demand", "Curtailed Production"]
 ax1_heights = [unmet_demand, curtailed_prod]
 x1 = np.arange(len(ax1_labels))
 
 bars1 = ax1.bar(x1, ax1_heights, width=0.5, color=['tab:red', 'tab:green'], label="Energy Metrics")
-ax1.bar_label(bars1, [f"{round(x)} MWh" for x in ax1_heights])
+ax1.bar_label(bars1, [f"{engineering_notation(x)} MWh" for x in ax1_heights])
 ax1.set_ylabel("Energy (MWh)")
-ax1.set_ylim(0, max(ax1_heights) * 1.2)
+ax1.set_ylim(0, max(ax1_heights) * 10)
+ax1.set_yscale('symlog', linthresh=1e2)
 
 # --- Ax2: Economic metrics ---
 ax2_labels = ["Consumer Surplus", "Producer Surplus", "Social Welfare"]
@@ -654,9 +644,10 @@ x2 = np.arange(len(ax2_labels)) + len(x1) + 0.5     # offset to avoid overlap
 
 ax2 = ax1.twinx()
 bars2 = ax2.bar(x2, ax2_heights, width=0.5, color='tab:purple', label="Welfare Metrics")
-ax2.bar_label(bars2, [f"{round(x)} €" for x in ax2_heights])
+ax2.bar_label(bars2, [f"{engineering_notation(x)} €" for x in ax2_heights])
 ax2.set_ylabel("Monetary Value (€)")
-ax2.set_ylim(0, max(ax2_heights) * 1.2)
+ax2.set_ylim(0, max(ax2_heights) * 10)
+ax2.set_yscale('symlog', linthresh=10)
 
 xticks = np.concatenate([x1, x2])
 xlabels = ax1_labels + ax2_labels
@@ -676,13 +667,13 @@ x = np.arange(1,n_players+1,1)
 container = ax1.bar(x=x-width/2, height=profit_tot, width=width, tick_label=player_labels, color="tab:blue")
 ax1.bar_label(container, [f"{round(p)} €" for p in profit_tot])
 ax1.set_ylim(top=1.1*max(profit_tot))
-ax1.set_ylabel("Total profit")
+ax1.set_ylabel("Total profit (€)")
 
 ax2 = ax1.twinx()
 container = ax2.bar(x=x+width/2, height=profit_tot_by_cap, width=width, label=player_labels, color="tab:orange")
 ax2.bar_label(container, [f"{round(p)} €/MWh" for p in profit_tot_by_cap])
 ax2.set_ylim(top=1.2*max(profit_tot_by_cap))
-ax2.set_ylabel("Profit by Installed Capacity Unit")
+ax2.set_ylabel("Profit by Installed Capacity Unit (€/MWh)")
 
 ax1.set_title("Player Optimal Profits over the Period")
 
@@ -691,7 +682,7 @@ plt.tight_layout()
 
 # 5. Production and SoC per Player
 # Ax 1 for energy storage levels, ax 2 for energy storage discharging/charging power
-fig, ax1 = plt.subplots(figsize=(15,8))
+fig, ax1 = plt.subplots(figsize=(15,7))
 
 for player in range(n_players):
     ax1.plot(temps_with_zero_np, batt[player], label=f"SoC for Player {player + 1}")
@@ -712,7 +703,7 @@ ax2.grid()
 
 
 # 6. Nash Equilibrium Result
-plt.figure(figsize=(15,8))
+plt.figure(figsize=(15,7))
 x = range(1, len(profits[0]) + 1)
 if len(x) <= 20:
     xticks = np.array([1]+[2+2*i for i in range(int(np.floor(len(x)/2)))])
