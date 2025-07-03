@@ -6,7 +6,7 @@ import pandas as pd                   # DataFrames
 import matplotlib.pyplot as plt       # Plotting
 import numpy as np                    # Numerical operations (similar to Julia base)
 
-from new_data import load_price_demand_curve_data, load_res_production_data
+from functions_data import load_price_demand_curve_data, load_res_production_data
 import os
 
 ## === Initialization of the problem ===
@@ -14,8 +14,9 @@ import os
 # Set changing parameters
 season = "Summer"           # Modelled season \in {"Winter", "Summer", "LowLoad"}
 plots = False
+data_plots = True
 bidding_zone = "DK2"        # Modelled Denmark bidding zone \in {"DK1", "DK2"} for price demand curve
-n_players = 2               # Number of storage players in the Cournot game \in {1, 2, 4, 6, 8}
+n_players = 4               # Number of storage players in the Cournot game \in {1, 2, 4, 6, 8}
 alpha_batt = 0.5            # Initial storage level (%)
 min_eta = 0.85              # Minimal storage round-trip efficiency
 OC_default = 5              # Default storage operating cost
@@ -36,14 +37,12 @@ temps = range(T)    # time periods iterable
 
 
 ## === Load price demand curves ===
-Demand_price, Demand_volume = load_price_demand_curve_data(bidding_zone=bidding_zone, time_period=season, demand_step_numbers=D, plots=plots)
-
-# Compute relative parameters
+Demand_price, Demand_volume = load_price_demand_curve_data(bidding_zone=bidding_zone, time_period=season, demand_step_numbers=D, plots=data_plots)
 Demand_volume_total = Demand_volume.loc[D-1].to_numpy()   # Last row (Total accumulated volume)
 
 
 ## === Load RES profile ===
-RES = load_res_production_data(season, plots=plots)
+RES = load_res_production_data(season, plots=data_plots)
 
 # Compute hourly residual demand (<0 if residual production)
 Residual = -RES + Demand_volume_total
@@ -91,7 +90,8 @@ plt.title("Residual Demand Over Time")
 plt.grid()
 
 plt.tight_layout()
-plt.savefig(f"{bidding_zone+season}-market_data.png")
+if plots:
+    plt.savefig(f"{bidding_zone+season}-market_data.png")
 
 
 # Battery/Storage parameters
@@ -148,7 +148,8 @@ axs[1].legend()
 axs[1].grid(True)
 
 plt.tight_layout()
-plt.savefig(f"{bidding_zone+season}-storage_characteristics.png")
+if plots:
+    plt.savefig(f"{bidding_zone+season}-storage_characteristics.png")
 
 
 # Final initialization
@@ -485,7 +486,7 @@ curtailed_prod = sum(max(-Demand_volume[-1, t] + q_total[t], 0) for t in temps)
 
 # 9. Consumer Surplus
 for p in range(1,n_players):
-    if output[p][5][t] != output[0][5][t]:
+    if output[p][5] != output[0][5]:
         raise "Error in convergence"
     
 CS = np.array([output[0][5][t] for t in temps])    # Now we can assume each player outputs the same CS
@@ -536,8 +537,8 @@ plt.subplot(2,2,2)
 
 plt.step(temps_with_zero_np, np.append(Demand_volume[-1, :], Demand_volume[-1, -1]), label="Demand", where='post', color='red', linestyle='--') 
 plt.bar(temps_np+0.5, RES, label="RES Production", color='green')
-plt.bar(temps_np+0.5, supply_total, label="Storage Supply", color='blue', bottom=RES)
-plt.bar(temps_np+0.5, demand_total, label="Storage Demand", color='blue', alpha=0.7, bottom=0)
+plt.bar(temps_np+0.5, supply_total, label="Storage Discharge", color='blue', bottom=RES)
+plt.bar(temps_np+0.5, demand_total, label="Storage Charge", color='deepskyblue', bottom=0)
 plt.xlabel("Time (h)")
 plt.ylabel("Power (MW)")
 bottom, top = plt.ylim()
@@ -561,11 +562,12 @@ ax1_labels = ["Unmet Demand", "Curtailed Production"]
 ax1_heights = [unmet_demand, curtailed_prod]
 x1 = np.arange(len(ax1_labels))
 
-bars1 = ax1.bar(x1, ax1_heights, width=0.5, color=['tab:red', 'tab:green'], label="Energy Metrics")
+bars1 = ax1.bar(x1, ax1_heights, width=0.5, color='tab:red', label="Energy Metrics")
 ax1.bar_label(bars1, [f"{engineering_notation(x)} MWh" for x in ax1_heights])
 ax1.set_ylabel("Energy (MWh)")
 ax1.set_ylim(0, max(ax1_heights) * 10)
 ax1.set_yscale('symlog', linthresh=1e2)
+ax1.tick_params(axis='y', colors='tab:red')
 
 # === Ax2: Economic metrics ===
 ax2_labels = ["Consumer Surplus", "Producer Surplus", "Social Welfare"]
@@ -578,6 +580,7 @@ ax2.bar_label(bars2, [f"{engineering_notation(x)} €/h" for x in ax2_heights])
 ax2.set_ylabel("Average Amount per Hour (€/h)")
 ax2.set_ylim(0, max(ax2_heights) * 10)
 ax2.set_yscale('symlog', linthresh=10)
+ax2.tick_params(axis='y', colors='tab:purple')
 
 xticks = np.concatenate([x1, x2])
 xlabels = ax1_labels + ax2_labels
@@ -598,17 +601,20 @@ container = ax1.bar(x=x-width/2, height=profit_tot, width=width, tick_label=play
 ax1.bar_label(container, [f"{round(p)} €" for p in profit_tot])
 ax1.set_ylim(top=1.1*max(profit_tot))
 ax1.set_ylabel("Total profit (€)")
+ax1.tick_params(axis='y', colors='tab:blue')
 
 ax2 = ax1.twinx()
 container = ax2.bar(x=x+width/2, height=profit_tot_by_cap, width=width, label=player_labels, color="tab:orange")
-ax2.bar_label(container, [f"{round(p)} €/MWh" for p in profit_tot_by_cap])
+ax2.bar_label(container, [f"{round(p,2)} €/MWh" for p in profit_tot_by_cap])
 ax2.set_ylim(top=1.2*max(profit_tot_by_cap))
 ax2.set_ylabel("Profit by Installed Capacity Unit (€/MWh)")
+ax2.tick_params(axis='y', colors='tab:orange')
 
 ax1.set_title("Player Optimal Profits over the Period")
 
 plt.tight_layout()
-plt.savefig(f"{bidding_zone+season}-{n_players}players-main_market_results.png")
+if plots:
+    plt.savefig(f"{bidding_zone+season}-{n_players}players-main_market_results.png")
 
 
 # 5. Production and SoC per Player
@@ -630,8 +636,8 @@ ax2.axhline(y=0, color='black', linewidth=1)
 ax2.set_ylabel('Power [MW]')
 ax2.legend(loc='upper right')
 ax2.grid()
-# fig.text(0.5, 0.01, "Player Production = Discharge - Charge Over Time", ha="center")
-plt.savefig(f"{bidding_zone+season}-{n_players}players-storage_soc.png")
+if plots:
+    plt.savefig(f"{bidding_zone+season}-{n_players}players-storage_soc.png")
 
 
 # 6. Nash Equilibrium Result
@@ -667,7 +673,8 @@ plt.title("Profit Evolution over Cournot Iteration")
 plt.ylim(bottom = 0)
 plt.grid(True)
 plt.legend()
-plt.savefig(f"{bidding_zone+season}-{n_players}players-cournot_metrics.png")
+if plots:
+    plt.savefig(f"{bidding_zone+season}-{n_players}players-cournot_metrics.png")
 
 
 # Adjust layout and show the plot

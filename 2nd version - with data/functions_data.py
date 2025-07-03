@@ -111,7 +111,7 @@ def load_price_demand_curve_data(bidding_zone:str, time_period:str, demand_step_
             plt.grid(True)
             plt.legend()
             plt.tight_layout()
-        plt.savefig("price_demand_curves_fulldata.png")
+        # plt.savefig("price_demand_curves_fulldata.png")
 
         # Plot the demand over time in the day
         plt.figure(figsize=(12, 6))
@@ -133,7 +133,7 @@ def load_price_demand_curve_data(bidding_zone:str, time_period:str, demand_step_
         plt.legend()
         plt.tight_layout()
         # plt.show()
-        plt.savefig("demand_over_time_fulldata.png")
+        # plt.savefig("demand_over_time_fulldata.png")
 
 
     return Demand_Price, Demand_Volume
@@ -248,7 +248,7 @@ def load_res_production_data(season:str, plots=False):
         plt.legend(loc="upper right")
 
         plt.tight_layout()
-        plt.savefig("RES_production_mix-fulldata.png")
+        # plt.savefig("RES_production_mix-fulldata.png")
         # plt.show()
 
 
