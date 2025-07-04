@@ -5,6 +5,7 @@ from gurobipy import GRB              # Gurobi constants (e.g., GRB.MAXIMIZE)
 import pandas as pd                   # DataFrames
 import matplotlib.pyplot as plt       # Plotting
 import numpy as np                    # Numerical operations (similar to Julia base)
+from operator import itemgetter
 
 from functions_data import *
 from functions_plots import *
@@ -29,12 +30,11 @@ max_iter = 100              # Nash equilibrium maximum iteration number
 
 
 # Diverse parameters
-np.random.seed(101)
-epsilon = 1e-5
+diff_table = []     # Store the difference between model outputs for each iteration
 
-# Set time horizon parameters_
+# Set time horizon parameters
 T = 24              # number of time periods
-temps = range(T)    # time periods iterable
+TIME = range(T)    # time periods iterable
 
 
 ## === DATA LOADING ===
@@ -51,43 +51,19 @@ Residual = -RES + Demand_volume_total
 
 
 ## Load Battery Parameters
-Residual_corrected, Local_cumul = load_storage_data(
-    Residual,
-    n_players,
-    min_eta,
-    storage_Crate_default,
-    Q_max_all=Q_max_all,
-    Q_all=Q_all,
-    OC_all=OC_all,
-    E_max_all=E_max_all,
-    Eta_all=Eta_all,
-    player=0,
-    plots=True,
-    bidding_zone,
-    season
-)
+OC_all, Eta_all, E_max_all, Q_max_all, Q_all = load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_default, N, 
+                                                                 plots=True, bidding_zone=bidding_zone, season=season)
 
 
 ## === PLOTTING: loaded data for the modelled scenario ===
 fig, axs = plt.subplots(2, 2, figsize=(15, 7))
-plot_price_demand_curve(axs[0,0], Demand_price, Demand_volume, temps)
-plot_demand_over_time(axs[0, 1], Demand_volume_total, temps)
-plot_renewable_over_time(axs[1, 0], RES, Demand_volume_total, temps)
-plot_residual_over_time(axs[1, 1], Residual, temps)
+plot_price_demand_curve(axs[0,0], Demand_price, Demand_volume)
+plot_demand_over_time(axs[0, 1], Demand_volume_total)
+plot_renewable_over_time(axs[1, 0], RES, Demand_volume_total)
+plot_residual_over_time(axs[1, 1], Residual)
 fig.tight_layout()
 if plots:
     fig.savefig(f"{bidding_zone+season}-market_data.png")
-
-
-
-
-# Final initialization
-M = [max(Demand_volume.iloc[-1, t], RES[t]) for t in range(T)]
-M = [5 * m for m in M]
-Demand_price = Demand_price.to_numpy()
-Demand_volume = Demand_volume.to_numpy()
-
-diff_table = []     # Store the difference between model outputs for each iteration
 
 
 
@@ -95,19 +71,19 @@ diff_table = []     # Store the difference between model outputs for each iterat
 def model_run(q_ch_assumed, q_dis_assumed, player, state_ini=([],[])):
 
     # Initialization of model parameters
-    # Data: RES[t], Demand_price[j,t], Demand_volume[j,t] - t in temps, j in range(D)
-    forecasted_production = np.array([RES[t] + q_dis_assumed[t] - q_ch_assumed[t] for t in temps])
+    # Data: RES[t], Demand_price[j,t], Demand_volume[j,t] - t in TIME, j in range(D)
+    forecasted_production = np.array([RES[t] + q_dis_assumed[t] - q_ch_assumed[t] for t in TIME])
 
     if any(forecasted_production < 0):
         raise "Negative production: charging when no RES available"
 
     # Adjust demand curve as a price quota curve (based on residual demand) characterized by residual_demand_volume[j,t], residual_demand_price[j,t]
-    residual_demand_volume = np.array([[Demand_volume[j,t] - forecasted_production[t] for t in temps] for j in range(D)])
+    residual_demand_volume = np.array([[Demand_volume[j,t] - forecasted_production[t] for t in TIME] for j in range(D)])
     residual_demand_volume = np.where(residual_demand_volume < 0, 0, residual_demand_volume)
 
     residual_demand_price = np.zeros((D,T))
     for j in range(D):
-        for t in temps:
+        for t in TIME:
             if residual_demand_volume[j,t] > 0:
                 residual_demand_price[j,t] = Demand_price[j,t]
             else:
@@ -116,10 +92,10 @@ def model_run(q_ch_assumed, q_dis_assumed, player, state_ini=([],[])):
 
     # Initialize price quota curve parameters
     step_min_demand = np.insert(residual_demand_volume[:-1,:], 0, 0, axis=0)
-    step_max_additional_demand = np.array([[residual_demand_volume[j,t] - step_min_demand[j,t] for t in temps] for j in range(D)])
+    step_max_additional_demand = np.array([[residual_demand_volume[j,t] - step_min_demand[j,t] for t in TIME] for j in range(D)])
 
     # Used to constrain charging variables
-    residual_production = np.array([forecasted_production[t] - Demand_volume[-1,t] for t in temps])
+    residual_production = np.array([forecasted_production[t] - Demand_volume[-1,t] for t in TIME])
     residual_production = np.where(residual_production < 0, 0, residual_production)
 
 
@@ -128,24 +104,24 @@ def model_run(q_ch_assumed, q_dis_assumed, player, state_ini=([],[])):
     model.Params.OutputFlag = 0
     # model.Params.NonConvex = 2  # Allow for quadratic constraints
 
-    z_ch = model.addVars(temps, range(N), vtype=GRB.BINARY, name="z_ch")
-    z_dis = model.addVars(temps, range(N), vtype=GRB.BINARY, name="z_dis")
-    e = model.addVars(temps, lb=0, ub=E_max_all[player], name="e")
-    u = model.addVars(temps, range(D), vtype=GRB.BINARY, name="u")
-    b = model.addVars(temps, range(D), lb=0, name="b")
-    q = model.addVars(temps, lb=0, ub=Q_max_all[player], name="q")
+    z_ch = model.addVars(TIME, range(N), vtype=GRB.BINARY, name="z_ch")
+    z_dis = model.addVars(TIME, range(N), vtype=GRB.BINARY, name="z_dis")
+    e = model.addVars(TIME, lb=0, ub=E_max_all[player], name="e")
+    u = model.addVars(TIME, range(D), vtype=GRB.BINARY, name="u")
+    b = model.addVars(TIME, range(D), lb=0, name="b")
+    q = model.addVars(TIME, lb=0, ub=Q_max_all[player], name="q")
 
     # Define expression of variables
-    q_ch = {t: gp.quicksum(Q_all[player][i] * z_ch[t, i] for i in range(N)) for t in temps}
-    q_dis = {t: gp.quicksum(Q_all[player][i] * z_dis[t, i] for i in range(N)) for t in temps}
+    q_ch = {t: gp.quicksum(Q_all[player][i] * z_ch[t, i] for i in range(N)) for t in TIME}
+    q_dis = {t: gp.quicksum(Q_all[player][i] * z_dis[t, i] for i in range(N)) for t in TIME}
     revenue = {
         t:  gp.quicksum(residual_demand_price[j,t] * (b[t,j] + u[t,j] * step_min_demand[j,t]) for j in range(D)) - 
         OC_all[player] * (q_dis[t] + q_ch[t])
-        for t in temps
+        for t in TIME
     }
 
     # Linear objective function
-    model.setObjective(gp.quicksum(revenue[t] for t in temps), GRB.MAXIMIZE)
+    model.setObjective(gp.quicksum(revenue[t] for t in TIME), GRB.MAXIMIZE)
 
     ## Storage feasible operating region / technical constraints
     # Energy storage intertemporal constraints: SOC update
@@ -154,29 +130,29 @@ def model_run(q_ch_assumed, q_dis_assumed, player, state_ini=([],[])):
     model.addConstr(e[T-1] >= E_max_all[player] * alpha_batt)
 
     # Only one storage action possible: idle, charge or discharge at a fixed power rate
-    model.addConstrs(gp.quicksum(z_ch[t, i] + z_dis[t, i] for i in range(N)) <= 1 for t in temps)
+    model.addConstrs(gp.quicksum(z_ch[t, i] + z_dis[t, i] for i in range(N)) <= 1 for t in TIME)
 
     ## Identification of the market price > linearization
     # Only a single active price level (corresponding to the market clearing price)
-    model.addConstrs(gp.quicksum(u[t, j] for j in range(D)) == 1 for t in temps)
+    model.addConstrs(gp.quicksum(u[t, j] for j in range(D)) == 1 for t in TIME)
 
     # Identify amount of demand volume satisfied (for last demand step)
     model.addConstrs(b[t,j] <= u[t,j] * step_max_additional_demand[j,t]
-                     for t in temps for j in range(D))
+                     for t in TIME for j in range(D))
     
     # Constrain the discharging power to be equal to the satisfied demand ("balance equation")
-    model.addConstrs(q[t] == q_dis[t] for t in temps)
-    model.addConstrs(q[t] == gp.quicksum(b[t,j] + u[t,j] * step_min_demand[j,t] for j in range(D)) for t in temps)
+    model.addConstrs(q[t] == q_dis[t] for t in TIME)
+    model.addConstrs(q[t] == gp.quicksum(b[t,j] + u[t,j] * step_min_demand[j,t] for j in range(D)) for t in TIME)
 
     # In the case of residual production:
     # Market price = 0 because of data characteristics 
     # Charging is possible from residual RES
-    model.addConstrs(q_ch[t] <= residual_production[t] for t in temps)
+    model.addConstrs(q_ch[t] <= residual_production[t] for t in TIME)
     
     if isinstance(state_ini[0], np.ndarray):
         # Force convergence
-        model.addConstrs(z_ch[t,i] == state_ini[0][t,i] for t in temps for i in range(N))
-        model.addConstrs(z_dis[t,i] == state_ini[1][t,i] for t in temps for i in range(N))
+        model.addConstrs(z_ch[t,i] == state_ini[0][t,i] for t in TIME for i in range(N))
+        model.addConstrs(z_dis[t,i] == state_ini[1][t,i] for t in TIME for i in range(N))
 
 
     # Optimization of the model
@@ -197,23 +173,23 @@ def model_run(q_ch_assumed, q_dis_assumed, player, state_ini=([],[])):
         return None
 
     # Return outputs
-    state = [[z_ch[t, i].X for i in range(N)] for t in temps], \
-            [[z_dis[t, i].X for i in range(N)] for t in temps]
+    state = [[z_ch[t, i].X for i in range(N)] for t in TIME], \
+            [[z_dis[t, i].X for i in range(N)] for t in TIME]
     
-    u = [[u[t, j].X for j in range(D)] for t in temps]
+    u = [[u[t, j].X for j in range(D)] for t in TIME]
 
-    y = [[1 - sum(u[t][k] for k in range(j+1)) for j in range(D)] for t in temps]
+    y = [[1 - sum(u[t][k] for k in range(j+1)) for j in range(D)] for t in TIME]
 
     CS = [sum((Demand_price[j, t] - Demand_price[j+1, t]) * Demand_volume[j, t] * y[t][j]
-                for j in range(D-1)) for t in temps]    # not necessary to include computation for last satisfied load bc it sets the price hence does not increase CS
+                for j in range(D-1)) for t in TIME]    # not necessary to include computation for last satisfied load bc it sets the price hence does not increase CS
 
-    price = [sum(residual_demand_price[j,t] * u[t][j] for j in range(D)) for t in temps]
+    price = [sum(residual_demand_price[j,t] * u[t][j] for j in range(D)) for t in TIME]
 
-    output = [[q_ch[t].getValue() for t in temps],
-              [q_dis[t].getValue() for t in temps],
-              [e[t].X for t in temps],
+    output = [[q_ch[t].getValue() for t in TIME],
+              [q_dis[t].getValue() for t in TIME],
+              [e[t].X for t in TIME],
               price,
-              [revenue[t].getValue() for t in temps],
+              [revenue[t].getValue() for t in TIME],
               CS]
     
 
@@ -246,54 +222,15 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
     output = {}
     u = {}
     profits = {p: [] for p in range(n_players)}
-
-    if n_players == 1:
-        size_stor = [1]
-    elif n_players == 2:
-        size_stor = [1/3, 2/3]
-    elif n_players == 4:
-        size_stor = [0.1, 0.2, 0.3, 0.4]
-    elif n_players == 6:
-        size_stor = [0.05, 0.1, 0.1, 0.15, 0.25, 0.35]
-    elif n_players == 8:
-        size_stor = [0.05, 0.05, 0.1, 0.1, 0.1, 0.15, 0.2, 0.25]
-
-    # Create summary dictionary for storage characteristics
-    summary_data = {
-        "Player": [],
-        "OC": [],
-        "Eta": [],
-        "E_max": [],
-        "Q_max": [],
-        "Q_all": [],
-    }
-
+    
     iter = 0
     for player in range(n_players):
-        OC_all[player] = OC_default
-        Eta_all[player] = min_eta
-        E_max_all[player] = int(np.floor(Capacity_req * size_stor[player] / 10) * 10)
-        Q_max_all[player] = int(np.floor(PowerRating_available * size_stor[player]))
-        Q_all[player] = [round(Q_max_all[player] * (i / N),2) for i in range(1, N+1)]
-
-        # Fill the summary dictionnary
-        summary_data["Player"].append(chr(65 + player))
-        summary_data["OC"].append(OC_all[player])
-        summary_data["Eta"].append(Eta_all[player])
-        summary_data["Q_max"].append(Q_max_all[player])
-        summary_data["Q_all"].append(Q_all[player])
-        summary_data["E_max"].append(E_max_all[player])
-            
         # Initialize optimization model
         state[player], output[player], u[player] = model_run(q_ch_assumed_ini, q_dis_assumed_ini, player)
 
         # Store profits for later plots
-        profits[player].append(sum(output[player][4][t] for t in temps))
+        profits[player].append(sum(output[player][4][t] for t in TIME))
 
-    # DataFrame of storage characteristics
-    summary_df = pd.DataFrame(summary_data)
-    summary_df = summary_df.set_index("Player")
-    print(summary_df)
 
     # Store outputs of initialization models
     state_sys = [state[player] for player in range(n_players)]
@@ -307,12 +244,12 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
 
         # Profit maximisation for each player
         for player in range(n_players):
-            q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in temps]
-            q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in temps]
+            q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
+            q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
             state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player)
             
             # Store profits for later plots
-            profits[player].append(sum(output[player][4][t] for t in temps))
+            profits[player].append(sum(output[player][4][t] for t in TIME))
 
         state_sys = [state[player] for player in range(n_players)]
         ne.append(state_sys.copy())
@@ -327,17 +264,17 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
             for it in range(max_iter//10):
 
                 for player in range(p+1):
-                    q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in temps]
-                    q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in temps]
+                    q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
+                    q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
                     state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, 
                                                                          state_ini=(np.array(state[player][0]), np.array(state[player][1])))  
-                    profits[player].append(sum(output[player][4][t] for t in temps))      
+                    profits[player].append(sum(output[player][4][t] for t in TIME))      
 
                 for player in range(p+1, n_players):
-                    q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in temps]
-                    q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in temps]
+                    q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
+                    q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
                     state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player)
-                    profits[player].append(sum(output[player][4][t] for t in temps))
+                    profits[player].append(sum(output[player][4][t] for t in TIME))
 
                 state_sys = [state[player] for player in range(n_players)]
                 ne.append(state_sys.copy())
@@ -367,8 +304,8 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol=1e-7):
 
 
 ## === Setting values to initialize the run ===
-q_ch_assumed_ini = [0 for _ in temps]
-q_dis_assumed_ini = [0 for _ in temps]
+q_ch_assumed_ini = [0 for _ in TIME]
+q_dis_assumed_ini = [0 for _ in TIME]
 
 output, ne, iter, u, profits = nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, tol)
 
@@ -378,22 +315,22 @@ output, ne, iter, u, profits = nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_pl
 
 # 1. Proad = Discharge - Charge for each player and time
 proad = [
-    [output[player][1][t] - output[player][0][t] for t in temps]
+    [output[player][1][t] - output[player][0][t] for t in TIME]
     for player in range(n_players)
 ]
 
 # 2. Battery storage level per player
 batt = [
-    [E_max_all[player] * alpha_batt] + [output[player][2][t] for t in temps]
+    [E_max_all[player] * alpha_batt] + [output[player][2][t] for t in TIME]
     for player in range(n_players)
 ]
 
 # 3. Market price over time (assumed same for all players)
-market_price = [output[0][3][t] for t in temps]
+market_price = [output[0][3][t] for t in TIME]
 
 # 4. Revenue per player and time
 revenue = [
-    [output[player][4][t] for t in temps]
+    [output[player][4][t] for t in TIME]
     for player in range(n_players)
 ]
 
@@ -402,29 +339,29 @@ profit_tot = [sum(revenue[player]) for player in range(n_players)]
 profit_tot_by_cap = [profit_tot[p]/E_max_all[p] if E_max_all[p]!=0 else 0 for p in range(n_players)]
 
 # 6. Total quantity offered to the market
-supply_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] >= 0) for t in temps]   # positive for supply
-demand_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] < 0) for t in temps]    # negative for demand
-proad_total = [supply_total[t] + demand_total[t] for t in temps]
-q_total = [RES[t] + proad_total[t] for t in temps]
+supply_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] >= 0) for t in TIME]   # positive for supply
+demand_total = [sum(proad[player][t] for player in range(n_players) if proad[player][t] < 0) for t in TIME]    # negative for demand
+proad_total = [supply_total[t] + demand_total[t] for t in TIME]
+q_total = [RES[t] + proad_total[t] for t in TIME]
 
 # 7. Unmet demand
-unmet_demand = sum(max(Demand_volume[-1, t] - q_total[t], 0) for t in temps)
+unmet_demand = sum(max(Demand_volume[-1, t] - q_total[t], 0) for t in TIME)
 
 # 8. Curtailed production
-curtailed_prod = sum(max(-Demand_volume[-1, t] + q_total[t], 0) for t in temps)
+curtailed_prod = sum(max(-Demand_volume[-1, t] + q_total[t], 0) for t in TIME)
 
 # 9. Consumer Surplus
 for p in range(1,n_players):
     if output[p][5] != output[0][5]:
         raise "Error in convergence"
     
-CS = np.array([output[0][5][t] for t in temps])    # Now we can assume each player outputs the same CS
+CS = np.array([output[0][5][t] for t in TIME])    # Now we can assume each player outputs the same CS
 
 # 10. Producer Surplus
 PS = np.array([
     sum(revenue[player][t] for player in range(n_players)) + 
     RES[t] * market_price[t]
-    for t in temps
+    for t in TIME
 ])
 
 # 11. Social Welfare
@@ -433,8 +370,8 @@ SW = CS + PS
 
 ## === Plots ===
 plt.figure(figsize=(14,7))
-temps_np = np.array(temps)
-temps_with_zero_np = np.array([t for t in temps] + [T])
+temps_np = np.array(TIME)
+temps_with_zero_np = np.array([t for t in TIME] + [T])
 
 # 1. Market Price Plot
 plt.subplot(2,2,1)

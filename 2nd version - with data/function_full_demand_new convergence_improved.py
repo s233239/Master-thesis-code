@@ -153,8 +153,6 @@ if plots:
 
 
 # Final initialization
-M = [max(Demand_volume.iloc[-1, t], RES[t]) for t in range(T)]
-M = [5 * m for m in M]
 Demand_price = Demand_price.to_numpy()
 Demand_volume = Demand_volume.to_numpy()
 
