@@ -15,7 +15,7 @@ from functions_model import *
 
 ## === Initialization of the problem ===
 # Set changing parameters
-season = "Summer"           # Modelled season \in {"Winter", "Summer", "LowLoad"}
+season = "Winter"           # Modelled season \in {"Winter", "Summer", "LowLoad"}
 plots = False
 data_plots = True
 bidding_zone = "DK2"        # Modelled Denmark bidding zone \in {"DK1", "DK2"} for price demand curve
@@ -27,7 +27,7 @@ storage_Crate_default = 0.5 # Charge/discharge rate relative to energy capacity.
 N = 10                      # Discretization number for power outputs
 D = 20                      # Discretization number for price demand curve steps
 tol = 1e-5                  # Nash equilibrium tolerance parameter
-max_iter = 100              # Nash equilibrium maximum iteration number
+max_iter = 50               # Nash equilibrium maximum iteration number
 
 
 # Diverse parameters
@@ -93,7 +93,12 @@ batt = [
     for player in range(n_players)
 ]
 
-# 3. Market price over time (assumed same for all players)
+# 3. Market price over time
+for p in range(1,n_players):
+    if output[p][3] != output[0][3]:
+        raise "Error in convergence"
+
+# Now we can assume each player outputs the same market price, CS, PS, SW etc.
 market_price = [output[0][3][t] for t in TIME]
 
 # 4. Revenue per player and time
@@ -119,11 +124,7 @@ unmet_demand = sum(max(Demand_volume[-1, t] - q_total[t], 0) for t in TIME)
 curtailed_prod = sum(max(-Demand_volume[-1, t] + q_total[t], 0) for t in TIME)
 
 # 9. Consumer Surplus
-for p in range(1,n_players):
-    if output[p][5] != output[0][5]:
-        raise "Error in convergence"
-    
-CS = np.array([output[0][5][t] for t in TIME])    # Now we can assume each player outputs the same CS
+CS = np.array([output[0][5][t] for t in TIME])
 
 # 10. Producer Surplus
 PS = np.array([

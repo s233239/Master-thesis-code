@@ -176,14 +176,14 @@ def load_res_production_data(season:str, plots=False):
     medoids_profile_average = cluster_files["medoids_profile_summary--1cluster.csv"][[f"{h}" for h in range(24)]]
 
     # Compute RES hourly capacity factors - higher probability cluster is chosen (or in some cases of similar probability, the more relevant) - see clusters diagnostic
-    offshore_profile_winter = medoids_profile.iloc[1].to_numpy() * 0.9
+    offshore_profile_winter = medoids_profile.iloc[1].to_numpy() * 0.8
     # offshore_profile_summer = medoids_profile.iloc[2].to_numpy()
     # offshore_profile_winter = medoids_profile_average.iloc[0].to_numpy()
     offshore_profile_summer = medoids_profile_average.iloc[1].to_numpy()
 
     # onshore_profile_winter = medoids_profile.iloc[5].to_numpy()
     # onshore_profile_summer = medoids_profile.iloc[7].to_numpy()
-    onshore_profile_winter = medoids_profile_average.iloc[2].to_numpy()
+    onshore_profile_winter = medoids_profile_average.iloc[2].to_numpy() * 1.1
     onshore_profile_summer = medoids_profile_average.iloc[3].to_numpy()
 
     # solar_profile_winter = medoids_profile.iloc[9].to_numpy()
