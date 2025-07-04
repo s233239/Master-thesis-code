@@ -48,7 +48,7 @@ RES = load_res_production_data(season, plots=data_plots)
 Residual = -RES + Demand_volume_total
 
 
-plt.figure(figsize=(15,7))
+plt.figure(figsize=(14,7))
 
 plt.subplot(2,2,1)
 for t in temps:
@@ -617,7 +617,7 @@ if plots:
 
 # 5. Production and SoC per Player
 # Ax 1 for energy storage levels, ax 2 for energy storage discharging/charging power
-fig, ax1 = plt.subplots(figsize=(15,7))
+fig, ax1 = plt.subplots(figsize=(14,7))
 
 for player in range(n_players):
     ax1.plot(temps_with_zero_np, batt[player], label=f"SoC for Player {player + 1}")
@@ -639,7 +639,7 @@ if plots:
 
 
 # 6. Nash Equilibrium Result
-plt.figure(figsize=(15,7))
+plt.figure(figsize=(14,7))
 x = range(1, len(profits[0]) + 1)
 if len(x) <= 20:
     xticks = np.array([1]+[2+2*i for i in range(int(np.floor(len(x)/2)))])

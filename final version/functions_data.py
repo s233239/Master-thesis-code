@@ -33,10 +33,10 @@ def load_price_demand_curve_data(bidding_zone:str, time_period:str, demand_step_
             Default is [0, 6, 12, 18].
 
     Returns:
-        (Demand_Price, Demand_Volume) (pd.DataFrame, pd.DataFrame):
-            - Demand_Price: DataFrame of shape (N, 24) containing demand price steps for the scenario.
+        (Demand_Price, Demand_Volume) (np.array, np.array):
+            - Demand_Price: Array of shape (N, 24) containing demand price steps for the scenario.
               Columns are hours (0-23), rows are price steps (sorted high to low).
-            - Demand_Volume: DataFrame of shape (N, 24) with corresponding cumulative volumes per price step,
+            - Demand_Volume: Array of shape (N, 24) with corresponding cumulative volumes per price step,
               same structure as Demand_Price.
     """
     # === PARAMETERS ===
@@ -137,7 +137,7 @@ def load_price_demand_curve_data(bidding_zone:str, time_period:str, demand_step_
         # plt.savefig("demand_over_time_fulldata.png")
 
 
-    return Demand_Price, Demand_Volume
+    return Demand_Price.to_numpy(), Demand_Volume.to_numpy()
 
 
 def load_res_production_data(season:str, plots=False):
