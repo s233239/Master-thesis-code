@@ -4,11 +4,11 @@ from gurobipy import GRB              # Gurobi constants (e.g., GRB.MAXIMIZE)
 
 
 # Function containing the optimisation model
-def model_run(q_ch_assumed, q_dis_assumed, player, model_variables, storage_variables, state_ini=([],[])):
+def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, state_ini=([],[]), policy=None):
 
     # Unpack variables
-    [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table] = model_variables
-    [alpha_batt, OC_all, Eta_all, E_max_all, Q_max_all, Q_all] = storage_variables
+    [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table_initial] = model_parameters
+    [alpha_batt, OC_all, Eta_all, E_max_all, Q_max_all, Q_all] = storage_parameters
 
     # Initialization of model parameters
     # Data: RES[t], Demand_price[j,t], Demand_volume[j,t] - t in TIME, j in range(D)
@@ -156,7 +156,7 @@ def arrays_are_equal(a1, a2, n_players, diff_table, tol=1e-7):
     return are_equal, diff_table
 
 
-def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_variables, storage_variables, tol=1e-7):
+def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, storage_parameters, tol=1e-7):
 
     ne = [[], []]
     state = {}
@@ -165,13 +165,14 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_variables, sto
     profits = {p: [] for p in range(n_players)}
 
     # Unpack variables
-    [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table] = model_variables
-    [alpha_batt, OC_all, Eta_all, E_max_all, Q_max_all, Q_all] = storage_variables
-    
+    [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table_initial] = model_parameters
+    [alpha_batt, OC_all, Eta_all, E_max_all, Q_max_all, Q_all] = storage_parameters
+    diff_table = diff_table_initial.copy()
+
     iter = 0
     for player in range(n_players):
         # Initialize optimization model
-        state[player], output[player], u[player] = model_run(q_ch_assumed_ini, q_dis_assumed_ini, player, model_variables, storage_variables)
+        state[player], output[player], u[player] = model_run(q_ch_assumed_ini, q_dis_assumed_ini, player, model_parameters, storage_parameters)
 
         # Store profits for later plots
         profits[player].append(sum(output[player][4][t] for t in TIME))
@@ -182,7 +183,7 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_variables, sto
     ne.append(state_sys.copy())
 
     if n_players == 1:
-        return output, ne, iter, u, profits
+        return output, ne, iter, u, profits, diff_table
 
     # Next iteration
     iter += 1
@@ -194,7 +195,7 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_variables, sto
         for player in range(n_players):
             q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
             q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-            state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_variables, storage_variables)
+            state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters)
             
             # Store profits for later plots
             profits[player].append(sum(output[player][4][t] for t in TIME))
@@ -217,14 +218,14 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_variables, sto
                 for player in range(p+1):
                     q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
                     q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_variables, storage_variables, 
+                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, 
                                                                          state_ini=(np.array(state[player][0]), np.array(state[player][1])))  
                     profits[player].append(sum(output[player][4][t] for t in TIME))      
 
                 for player in range(p+1, n_players):
                     q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
                     q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_variables, storage_variables)
+                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters)
                     profits[player].append(sum(output[player][4][t] for t in TIME))
 
                 state_sys = [state[player] for player in range(n_players)]
@@ -254,4 +255,4 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_variables, sto
     else:
         print(f"Optimization was successful. It converged in {iter} iterations.")
         
-    return output, ne, iter, u, profits
+    return output, ne, iter, u, profits, diff_table
