@@ -110,7 +110,8 @@ def load_price_demand_curve_data(bidding_zone:str, time_period:str, demand_step_
             plt.title(f'Price Demand Curve of Scenarios at {hour:02}:00')
             plt.grid(True)
             plt.legend()
-            plt.tight_layout()
+        
+        plt.tight_layout()
         # plt.savefig("price_demand_curves_fulldata.png")
 
         # Plot the demand over time in the day
@@ -206,7 +207,7 @@ def load_res_production_data(season:str, plots=False):
     # Choose data corresponding to the chosen scenario
     if season == "Winter":
         RES = RES_winter
-    else:
+    else:   # Summer or LowLoad
         RES = RES_summer
 
 
@@ -255,9 +256,7 @@ def load_res_production_data(season:str, plots=False):
     return RES
 
 
-def load_storage_data(Residual, n_players, min_eta, storage_Crate_default,
-                      Q_max_all, Q_all, OC_all, E_max_all, Eta_all,
-                      OC_default, N,
+def load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_default, N,
                       plots=False, bidding_zone=None, season=None):
     """
     Compute storage sizing for multiple players based on residual demand.
@@ -278,7 +277,7 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default,
     """
     # Battery parameters for all players
     Q_max_all = np.zeros(n_players)     # Maximum available power (MW)
-    Q_all = np.zeros(n_players, N)      # List of possible power bids
+    Q_all = np.zeros((n_players, N))      # List of possible power bids
     OC_all = np.zeros(n_players)        # Marginal cost (€/MW)
     E_max_all = np.zeros(n_players)     # Maximum battery level (MWh)
     Eta_all = np.zeros(n_players)       # Storage round-trip efficiency
@@ -288,7 +287,7 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default,
     Residual = np.insert(Residual, 0, 0, 0)
 
     # Storage requirement computation
-    Residual_corrected = np.where(Residual > 0, Residual / min_eta, Residual)   # Taking into account the round-trip efficiency when the battery discharge on the grid (=> need to discharge 100% + eta% energy to satisfy the corresponding demand)
+    Residual_corrected = np.where(Residual > 0, Residual/min_eta, Residual)   # Taking into account the round-trip efficiency when the battery discharge on the grid (=> need to discharge 100% + eta% energy to satisfy the corresponding demand)
 
     Cummul_res_corr = np.cumsum(Residual_corrected)
 
@@ -302,6 +301,10 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default,
     # PowerRating_req = np.max(np.abs(Residual_corrected))    
     # PowerRating_req = int(np.round(PowerRating_req/10)*10)
     PowerRating_available = int(np.ceil(Capacity_req * storage_Crate_default))  # MW total available
+
+    # Offset back
+    Residual = Residual[1:]
+    Residual_corrected = Residual_corrected[1:]
 
     # Define player size shares depending on n_players
     if n_players == 1:
@@ -322,7 +325,7 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default,
         Eta_all[player] = min_eta
         E_max_all[player] = int(np.floor(Capacity_req * size_stor[player] / 10) * 10)
         Q_max_all[player] = int(np.floor(PowerRating_available * size_stor[player]))
-        for i in range(N+1):
+        for i in range(N):
             Q_all[player,i] = round(Q_max_all[player] * (i / N), 2)
   
     # DataFrame of storage characteristics
@@ -341,20 +344,22 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default,
             raise ValueError("bidding_zone and season must be provided if plots=True")
 
         fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
-        x = len(Residual)
+        x = range(len(Residual))
 
+        # Plot 1: Residual and Residual Corrected
         axs[0].bar(x, Residual_corrected, color='tab:orange',
                    label='Residual Corrected (inefficiency)', align='edge')
         axs[0].bar(x, Residual, color='tab:blue',
                    label='Residual (Demand - RES)', align='edge')
         axs[0].axhline(PowerRating_available, color='tab:red', linestyle='--',
-                       label='Available Storage Power (MW)')
+                       label='[max] Available Storage Power (MW)')
         axs[0].axhline(0, color='black', linestyle='--', linewidth=0.8)
         axs[0].set_title('Residual Demand vs Corrected Residual')
         axs[0].set_ylabel('Power [MW]')
         axs[0].legend()
         axs[0].grid(True)
 
+        # Plot 2: Cumulative and Local Cumulative
         axs[1].plot(Cummul_res_corr, label='Cumulative Residual Corrected',
                     color='tab:green', marker='.')
         axs[1].plot(Local_cumul, label='Local Cumulative (Storage Level)',
@@ -369,7 +374,7 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default,
         axs[1].grid(True)
 
         plt.tight_layout()
-        plt.savefig(f"{bidding_zone+season}-storage_characteristics.png")
+        # plt.savefig(f"{bidding_zone+season}-storage_characteristics.png")
 
     return OC_all, Eta_all, E_max_all, Q_max_all, Q_all
 
