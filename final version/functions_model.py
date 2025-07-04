@@ -2,9 +2,11 @@ import numpy as np
 import gurobipy as gp                 # Gurobi Python API
 from gurobipy import GRB              # Gurobi constants (e.g., GRB.MAXIMIZE)
 
+from functions_policy import apply_policy_to_revenue
+
 
 # Function containing the optimisation model
-def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, state_ini=([],[]), policy=None):
+def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters, state_ini=([],[]), policy=None):
 
     # Unpack variables
     [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table_initial] = model_parameters
@@ -59,9 +61,12 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
         OC_all[player] * (q_dis[t] + q_ch[t])
         for t in TIME
     }
+    price = [gp.quicksum(residual_demand_price[j,t] * u[t,j] for j in range(D)) for t in TIME]     # Not used to compute revenue to ensure not having a quadratic objective 
+                                                                                                    # - but instead used for policy modelling
 
     # Linear objective function
-    model.setObjective(gp.quicksum(revenue[t] for t in TIME), GRB.MAXIMIZE)
+    objective = apply_policy_to_revenue(gp.quicksum(revenue[t] for t in TIME), q_ch, q_dis, np.array(price), policy_type, policy_parameters)
+    model.setObjective(objective, GRB.MAXIMIZE)
 
     ## Storage feasible operating region / technical constraints
     # Energy storage intertemporal constraints: SOC update
@@ -156,7 +161,7 @@ def arrays_are_equal(a1, a2, n_players, diff_table, tol=1e-7):
     return are_equal, diff_table
 
 
-def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, storage_parameters, tol=1e-7):
+def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, storage_parameters, policy_type, policy_parameters, tol=1e-7):
 
     ne = [[], []]
     state = {}
@@ -172,7 +177,7 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, st
     iter = 0
     for player in range(n_players):
         # Initialize optimization model
-        state[player], output[player], u[player] = model_run(q_ch_assumed_ini, q_dis_assumed_ini, player, model_parameters, storage_parameters)
+        state[player], output[player], u[player] = model_run(q_ch_assumed_ini, q_dis_assumed_ini, player, model_parameters, storage_parameters, policy_type, policy_parameters)
 
         # Store profits for later plots
         profits[player].append(sum(output[player][4][t] for t in TIME))
@@ -195,7 +200,7 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, st
         for player in range(n_players):
             q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
             q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-            state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters)
+            state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters)
             
             # Store profits for later plots
             profits[player].append(sum(output[player][4][t] for t in TIME))
@@ -218,14 +223,14 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, st
                 for player in range(p+1):
                     q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
                     q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, 
+                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters, 
                                                                          state_ini=(np.array(state[player][0]), np.array(state[player][1])))  
                     profits[player].append(sum(output[player][4][t] for t in TIME))      
 
                 for player in range(p+1, n_players):
                     q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
                     q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters)
+                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters)
                     profits[player].append(sum(output[player][4][t] for t in TIME))
 
                 state_sys = [state[player] for player in range(n_players)]
