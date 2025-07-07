@@ -385,6 +385,11 @@ def plot_scenarios_analysis(outputs):
     plt.subplot(2,2,4)
     for i, scen in enumerate(scenario_names):
         plt.bar(x + i*bar_width, profits_matrix[:, i], width=bar_width, label=scen, color=scenario_colors[i])
+        
+        policy_addon = np.array(outputs[scen][p][6])
+        plt.bar(TIME, base_revenue, alpha=0.7, label=f'{scen} Base Revenue', color=scenario_colors[j])
+        plt.bar(TIME, policy_addon, bottom=base_revenue, label=f'{scen} Tariff Cost', hatch='//', color=scenario_colors[j])
+
 
     plt.xticks(x + bar_width * (n_scenarios - 1) / 2, [f'Player {p+1}' for p in range(n_players)])
     plt.ylabel("Total Profit (€)")
