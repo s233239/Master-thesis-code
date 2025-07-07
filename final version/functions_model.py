@@ -61,12 +61,18 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
         OC_all[player] * (q_dis[t] + q_ch[t])
         for t in TIME
     }
-    price = [gp.quicksum(residual_demand_price[j,t] * u[t,j] for j in range(D)) for t in TIME]     # Not used to compute revenue to ensure not having a quadratic objective 
-                                                                                                    # - but instead used for policy modelling
+    
+    # Apply policy constraints to revenue computations
+    if policy_type != "none":
+        residual_series = Demand_volume[D-1,:]
+        adjust_to_revenue = apply_policy_to_revenue(revenue, q_ch, q_dis, residual_series, policy_type, policy_parameters)
 
-    # Linear objective function
-    objective = apply_policy_to_revenue(gp.quicksum(revenue[t] for t in TIME), q_ch, q_dis, np.array(price), policy_type, policy_parameters)
-    model.setObjective(objective, GRB.MAXIMIZE)
+        # Linear objective function
+        model.setObjective(gp.quicksum(revenue[t] + adjust_to_revenue[t] for t in TIME), GRB.MAXIMIZE)
+
+    else: 
+        # Linear objective function
+        model.setObjective(gp.quicksum(revenue[t] for t in TIME), GRB.MAXIMIZE)
 
     ## Storage feasible operating region / technical constraints
     # Energy storage intertemporal constraints: SOC update
@@ -130,12 +136,29 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
 
     price = [sum(residual_demand_price[j,t] * u[t][j] for j in range(D)) for t in TIME]
 
+    if policy_type == "none":
+        adjust_to_revenue = [0.0 for t in TIME]
+    else:
+        adjust_to_revenue = [adjust_to_revenue[t].getValue() for t in TIME]
+
+    proad = [q_dis[t].getValue() - q_ch[t].getValue() for t in TIME]
+
+    supply_total = [q_dis_assumed[t] + q_dis[t].getValue() for t in TIME]   # positive serie
+    demand_total = [q_ch_assumed[t] + q_ch[t].getValue() for t in TIME]     # positive serie
+    proad_total = [supply_total[t] - demand_total[t] for t in TIME]         # positive when supply
+    q_total = [RES[t] + proad_total[t] for t in TIME]
+    unmet_demand = [max(Demand_volume[-1, t] - q_total[t], 0) for t in TIME]
+    curtailed_prod = [max(-Demand_volume[-1, t] + q_total[t], 0) for t in TIME]
+
     output = [[q_ch[t].getValue() for t in TIME],
               [q_dis[t].getValue() for t in TIME],
               [e[t].X for t in TIME],
               price,
               [revenue[t].getValue() for t in TIME],
-              CS]
+              CS,
+              adjust_to_revenue,
+              unmet_demand,
+              curtailed_prod]
     
 
     return state, output, u

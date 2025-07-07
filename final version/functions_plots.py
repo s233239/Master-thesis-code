@@ -19,6 +19,7 @@ Currently available:
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 
 ## Result Plots
@@ -274,7 +275,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     plt.subplot(2,2,2)
     for player in range(n_players):
-        plt.plot(x, profits[player], label=f"Player {player+1} Profit Over Iteration")
+        plt.plot(x, profits[player], label=f"Player {player+1} Profit")
     plt.xlabel("Iteration")
     plt.ylabel("Profit (€)")
     xticks[0]=2
@@ -284,11 +285,136 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     plt.grid(True)
     plt.legend()
 
+    plt.subplot(2,2,4)
+    for player in range(n_players):
+        plt.plot(x[2:], [profits[player][-1] - profits[player][i] for i in range(2,len(profits[player]))], label=f"Player {player+1}")
+    plt.xlabel("Iteration")
+    plt.ylabel("Profit (€)")
+    # xticks[0]=2
+    # plt.xticks(xticks)       
+    plt.title("Zoom on Profit Evolution")
+    # plt.ylim(bottom = 0)
+    plt.grid(True)
+    plt.legend()
+
     plt.tight_layout()
     if plots:
         plt.savefig(f"{bidding_zone+season}-{n_players}players-cournot_metrics.png")
 
     return
+
+
+def plot_scenarios_analysis(outputs):
+    """
+    Generate comparative plots of market and player metrics across multiple policy scenarios.
+
+    Parameters:
+        outputs (dict):
+            Dictionary mapping scenario names (str) to output data dictionaries.
+            Each output dict is indexed by player and contains lists of time series data:
+            [
+                q_ch (list of float): Charging quantities over time,
+                q_dis (list of float): Discharging quantities over time,
+                e (list of float): State of charge over time,
+                price (list of float): Market prices over time,
+                revenue (list of float): Revenue over time,
+                CS (float or list): Consumer surplus,
+                adjust_to_revenue (list of float): Policy-related cost or profit over time,
+                unmet_demand (list of float): Unmet demand over time,
+                curtailed_prod (list of float): Curtailed production over time,
+                profit_per_player (optional)
+            ]
+    """
+    scenario_names = list(outputs.keys())
+    n_scenarios = len(scenario_names)
+    scenario_colors = mpl.color_sequences['tab10'][:n_scenarios]
+    n_players = len(outputs[scenario_names[0]])
+    T = len(outputs[scenario_names[0]][0][3])
+    TIME = range(T)
+
+    # --- 1) Market price over time ---
+    plt.figure(figsize=(14, 7))
+    plt.subplot(2,2,1)
+    for j, scen in enumerate(scenario_names):
+        # Price is same across players, take player 0 for reference
+        price = outputs[scen][0][3]  
+        plt.step(TIME, price, label=scen, color=scenario_colors[j])
+    plt.title("Market Price Over Time")
+    plt.xlabel("Time")
+    plt.ylabel("Price (€/MWh)")
+    plt.legend()
+    plt.grid()
+
+
+    # --- 2) Unmet demand over time ---
+    plt.subplot(2,2,2)
+    for j, scen in enumerate(scenario_names):
+        unmet = outputs[scen][0][7]
+        plt.step(TIME, unmet, label=scen, color=scenario_colors[j])
+    plt.title("Unmet Demand Over Time")
+    plt.xlabel("Time")
+    plt.ylabel("Unmet Demand (MW)")
+    plt.legend()
+    plt.grid()
+
+
+    # --- 3) Curtailed production over time ---
+    plt.subplot(2,2,3)
+    for j, scen in enumerate(scenario_names):
+        curtailed = outputs[scen][0][8]
+        plt.step(TIME, curtailed, label=scen, color=scenario_colors[j])
+    plt.title("Curtailed Production Over Time")
+    plt.xlabel("Time")
+    plt.ylabel("Curtailed Production (MW)")
+    plt.legend()
+    plt.grid()
+
+
+    # --- 4) Profits per player grouped bar chart ---
+    # Build matrix of profits: shape (n_players, n_scenarios)
+    profits_matrix = np.zeros((n_players, n_scenarios))
+    for j, scen in enumerate(scenario_names):
+        for p in range(n_players):
+            # sum revenue as profit proxy, or have dedicated profit in outputs if available
+            profits_matrix[p, j] = sum(outputs[scen][p][4])  # sum over time of revenue
+
+    # Plot grouped bar chart
+    bar_width = 0.15
+    x = np.arange(n_players)
+
+    plt.subplot(2,2,4)
+    for i, scen in enumerate(scenario_names):
+        plt.bar(x + i*bar_width, profits_matrix[:, i], width=bar_width, label=scen, color=scenario_colors[i])
+
+    plt.xticks(x + bar_width * (n_scenarios - 1) / 2, [f'Player {p+1}' for p in range(n_players)])
+    plt.ylabel("Total Profit (€)")
+    plt.title("Player Profits by Scenario")
+    plt.legend()
+    plt.grid(axis='y')
+
+    plt.tight_layout()
+
+
+    # --- Other subplot: Revenue over time per player ---
+    # For each player, plot revenues stacked by base and tariff part
+    plt.figure(figsize=(12, 5))
+    for p in range(n_players):
+        plt.subplot(2,2,p+1)
+        for j, scen in enumerate(scenario_names):
+            base_revenue = np.array(outputs[scen][p][4]) 
+            policy_addon = np.array(outputs[scen][p][6])
+
+            plt.bar(TIME, base_revenue, alpha=0.7, label=f'{scen} Base Revenue', color=scenario_colors[j])
+            plt.bar(TIME, policy_addon, bottom=base_revenue, label=f'{scen} Tariff Cost', hatch='//', color=scenario_colors[j])
+
+        plt.title(f"Revenue and Tariff Cost Over Time - Player {p+1}")
+        plt.xlabel("Time")
+        plt.ylabel("Revenue (€)")
+        plt.legend()
+        plt.grid()
+    
+    plt.tight_layout()
+
 
 
 ## Price Demand Curve
