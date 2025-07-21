@@ -64,7 +64,7 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
     
     # Apply policy constraints to revenue computations
     if policy_type != "none":
-        residual_series = Demand_volume[D-1,:]
+        residual_series = Demand_volume[D-1,:] - RES
         adjust_to_revenue = apply_policy_to_revenue(revenue, q_ch, q_dis, residual_series, policy_type, policy_parameters)
 
         # Linear objective function

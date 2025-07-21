@@ -49,10 +49,12 @@ df['Month'] = df['HourUTC'].dt.month
 
 # Define seasons
 def get_season(month):
-    if month in [10, 11, 12, 1, 2, 3]:
+    if month in [11, 12, 1, 2]:
         return "Winter"
-    else:
+    elif month in [5, 6, 7, 8]:
         return "Summer"
+    else:
+        return "NA"
 
 df['Season'] = df['Month'].apply(get_season)
 
@@ -182,5 +184,5 @@ clusters_diagnostic_summary = pd.concat([offshore_cluster_diagnostic, onshore_cl
 clusters_diagnostic_summary.index.name = 'Cluster'
 clusters_diagnostic_summary.to_csv(f'clusters_diagnostic_summary--{n_clusters}cluster.csv')
 
-# plt.savefig(fname=os.path.join(script_dir, "plots", f"data_processing-v4--{n_clusters}cluster.png"), format="png")
+plt.savefig(fname=os.path.join(script_dir, "plots", f"vf--{n_clusters}cluster.png"), format="png")
 plt.show()

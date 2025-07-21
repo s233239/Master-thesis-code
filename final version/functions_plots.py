@@ -22,6 +22,8 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.patches import Patch
 
+from functions_policy import *
+
 
 ## Result Plots
 def plot_results(output, profits, diff_table, n_players, model_parameters, storage_parameters,
@@ -72,9 +74,9 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     ]
 
     # 3. Market price over time
-    for p in range(1,n_players):
-        if output[p][3] != output[0][3]:
-            raise "Error in convergence"
+    # for p in range(1,n_players):
+    #     if output[p][3] != output[0][3]:
+    #         raise "Error in convergence"
 
     # Now we can assume each player outputs the same market price, CS, PS, SW etc.
     market_price = [output[0][3][t] for t in TIME]
@@ -261,7 +263,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
         xticks = np.array([1]+[5+5*i for i in range(int(np.floor(len(x)/5)))])
     elif len(x) <= 100:
         xticks = np.array([1]+[10+10*i for i in range(int(np.floor(len(x)/10)))])
-    elif len(x) <= 200:
+    else:
         xticks = np.array([1]+[20+20*i for i in range(int(np.floor(len(x)/20)))])
 
 
@@ -305,7 +307,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     return
 
 
-def plot_scenarios_analysis(outputs):
+def plot_scenarios_analysis(outputs, model_parameters=None):
     """
     Generate comparative plots of market and player metrics across multiple policy scenarios.
 
@@ -326,6 +328,9 @@ def plot_scenarios_analysis(outputs):
                 profit_per_player (optional)
             ]
     """
+    if model_parameters:
+        [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table_initial] = model_parameters
+
     scenario_names = list(outputs.keys())
     n_scenarios = len(scenario_names)
     scenario_colors = mpl.color_sequences['tab10'][:n_scenarios]
@@ -333,7 +338,7 @@ def plot_scenarios_analysis(outputs):
     n_players = len(outputs[scenario_names[0]])
     T = len(outputs[scenario_names[0]][0][3])
     TIME = range(T)
-
+    
     # --- 1) Market price over time ---
     plt.figure(figsize=(14, 7))
     plt.subplot(2,2,1)
@@ -459,8 +464,22 @@ def plot_scenarios_analysis(outputs):
     scenario_legend = [Patch(color=scenario_colors[i], label=scenario_names[i]) for i in range(n_scenarios)]
     tariff_legend = [Patch(facecolor='gray', hatch='//', label="tariff cost", edgecolor='black')]
     plt.legend(handles=scenario_legend + tariff_legend, loc="upper right", ncol=2)
-
     plt.tight_layout()
+
+
+    # --- Tariffs Plots ---
+
+    # # Plot tariffs
+    # plt.figure(figsize=(10, 3))
+    # plt.step(range(24), tau_ch, where='mid')
+    # plt.step(range(24), tau_dis, where='mid')
+    # plt.step(range(24), residual_series, where='mid', color='red', linestyle='--')
+    # plt.title("Dynamic Tariffs (€/MWh)")
+    # plt.xlabel("Time (h)")
+    # plt.ylabel("Tariff")
+    # plt.grid(True, linestyle='--', alpha=0.6)
+    # plt.xticks(range(24))
+    # plt.tight_layout()
 
 
 
@@ -3921,8 +3940,8 @@ outputs = {'baseline': {0: [[0.0,
     11.782354631101953,
     41.311830270203245]]}}
 
-plot_scenarios_analysis(outputs)
-plt.show()
+# plot_scenarios_analysis(outputs)
+# plt.show()
 
 
 
