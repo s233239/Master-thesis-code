@@ -37,6 +37,14 @@ def main(season="Winter", plots=True, data_plots=False, scenario_plots=False, sa
     # Compute hourly residual demand (<0 if residual production)
     Residual = -RES + Demand_volume_total
 
+    # Final initialization for model
+    model_parameters = [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table_initial]
+
+    ## === NO STORAGE ===
+    if n_players == 0:
+        output = market_clearing_no_storage(model_parameters, plots=plots)
+        return output
+
     ## Load Battery Parameters
     OC_all, Eta_all, E_max_all, Q_max_all, Q_all = load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_default, N, 
                                                                     plots=scenario_plots, bidding_zone=bidding_zone, season=season)
@@ -56,8 +64,6 @@ def main(season="Winter", plots=True, data_plots=False, scenario_plots=False, sa
     # Setting values to initialize the run
     q_ch_assumed_ini = [0 for _ in TIME]
     q_dis_assumed_ini = [0 for _ in TIME]
-
-    model_parameters = [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table_initial]
     storage_parameters = [alpha_batt, OC_all, Eta_all, E_max_all, Q_max_all, Q_all]
 
     # Cournot iteration of the profit optimization model

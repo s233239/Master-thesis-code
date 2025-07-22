@@ -206,27 +206,29 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     ax1 = plt.subplot(2,2,4)
 
     player_labels = [f"{chr(65 + p)}" for p in range(n_players)]
-    width = 0.4
+    width = 0.3
     x = np.arange(1,n_players+1,1)
 
-    container = ax1.bar(x=x-width/2, height=profit_tot, width=width, tick_label=player_labels, color="tab:blue")
+    container = ax1.bar(x=x-width/2, height=profit_tot, width=width, color="tab:blue")
     ax1.bar_label(container, [f"{round(p)} €" for p in profit_tot])
     ax1.set_ylim(top=1.1*max(profit_tot))
     ax1.set_ylabel("Total profit (€)")
     ax1.tick_params(axis='y', colors='tab:blue')
 
     ax2 = ax1.twinx()
-    container = ax2.bar(x=x+width/2, height=profit_tot_by_cap, width=width, label=player_labels, color="tab:orange")
+    container = ax2.bar(x=x+width/2, height=profit_tot_by_cap, width=width, color="tab:orange")
     ax2.bar_label(container, [f"{round(p,2)} €/MWh" for p in profit_tot_by_cap])
     ax2.set_ylim(top=1.2*max(profit_tot_by_cap))
     ax2.set_ylabel("Profit by Installed Capacity Unit (€/MWh)")
     ax2.tick_params(axis='y', colors='tab:orange')
 
     ax1.set_title("Player Optimal Profits over the Period")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(player_labels)
 
     plt.tight_layout()
     if plots:
-        plt.savefig(f"{bidding_zone+season}-{n_players}players-main_market_results.png")
+        plt.savefig(f"{bidding_zone+season}-{n_players}players-main_market_results.pdf")
 
 
     # 5. Production and SoC per Player
@@ -251,7 +253,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     fig.tight_layout()
     if plots:
-        plt.savefig(f"{bidding_zone+season}-{n_players}players-storage_soc.png")
+        plt.savefig(f"{bidding_zone+season}-{n_players}players-storage_soc.pdf")
 
 
     # 6. Nash Equilibrium Result
@@ -302,7 +304,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     plt.tight_layout()
     if plots:
-        plt.savefig(f"{bidding_zone+season}-{n_players}players-cournot_metrics.png")
+        plt.savefig(f"{bidding_zone+season}-{n_players}players-cournot_metrics.pdf")
 
     return
 

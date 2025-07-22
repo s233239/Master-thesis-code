@@ -339,6 +339,8 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_de
         size_stor = [0.05, 0.1, 0.1, 0.15, 0.25, 0.35]
     elif n_players == 8:
         size_stor = [0.05, 0.05, 0.1, 0.1, 0.1, 0.15, 0.2, 0.25]
+    elif n_players == 0:
+        print(f"Distribution of storage capacity is not defined.")
     else:
         raise ValueError(f"Distribution of storage capacity is not defined for n_players={n_players}")
 

@@ -1,6 +1,7 @@
 import numpy as np
 import gurobipy as gp                 # Gurobi Python API
 from gurobipy import GRB              # Gurobi constants (e.g., GRB.MAXIMIZE)
+import matplotlib.pyplot as plt
 
 from functions_policy import apply_policy_to_revenue
 
@@ -137,6 +138,10 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
 
     CS = [sum((Demand_price[j, t] - Demand_price[j+1, t]) * Demand_volume[j, t] * y[t][j]
                 for j in range(D-1)) for t in TIME]    # not necessary to include computation for last satisfied load bc it sets the price hence does not increase CS
+
+    # CS_bis = [sum((Demand_price[j, t] - price[t]) * step_max_additional_demand[j, t] for j in range(D-1)) for t in TIME]
+
+    # print("Check CS:", CS==CS_bis)
 
     if policy_type == "none":
         adjust_to_revenue = [0.0 for t in TIME]
@@ -290,3 +295,160 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, st
         print(f"Optimization was successful. It converged in {iter} iterations.")
         
     return output, ne, iter, u, profits, diff_table
+
+
+def market_clearing_no_storage(model_parameters, plots=True):
+    """
+    Solves a market-clearing optimization without storage using Gurobi.
+    """
+    # Unpack variables
+    [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table_initial] = model_parameters
+
+    results = {
+        "quantity": np.zeros(T),
+        "price": np.zeros(T),
+        "producer_surplus": np.zeros(T),
+        "consumer_surplus": np.zeros(T),
+        "unmet_demand": np.zeros(T),
+        "curtailed_supply": np.zeros(T)
+    }
+
+    for t in range(T):
+        res_t = RES[t]
+        price_t = Demand_price[:, t]
+        volume_cum_t = Demand_volume[:, t]
+        volume_step = np.diff(np.insert(volume_cum_t, 0, 0.0))
+
+        J = range(len(volume_step))
+
+        model = gp.Model(f"market_clearing_t{t}")
+        model.setParam("OutputFlag", 0)
+
+        q_supply = model.addVar(name="q_supply", lb=0)
+        q_demand = model.addVars(J, name="q_demand", lb=0)
+
+        model.addConstr(q_supply <= res_t)
+        for j in J:
+            model.addConstr(q_demand[j] <= volume_step[j])
+
+        model.addConstr(q_supply == gp.quicksum(q_demand[j] for j in J), name="market_balance")
+
+        model.setObjective(gp.quicksum(price_t[j] * q_demand[j] for j in J), GRB.MAXIMIZE)
+
+        model.optimize()
+
+        if model.Status != GRB.OPTIMAL:
+            raise ValueError(f"Hour {t}: Optimization did not converge")
+
+        cleared_q = q_supply.X
+        opt_q_demand = [q_demand[j].X for j in J]
+        clearing_price = -model.getConstrByName("market_balance").Pi
+        
+        # for j in J:
+        #     if opt_q_demand[j] > 0:
+        #         if opt_q_demand[j] != volume_step[j]:
+        #             print(f"Check hour {t} clearing price:", clearing_price==price_t[j])
+        #             break
+        #     else:
+        #         print(f"Check hour {t} clearing price:", clearing_price==price_t[j])
+        #         break
+        
+        psurplus = clearing_price * cleared_q
+        csurplus = sum((price_t[j] - clearing_price) * opt_q_demand[j] for j in J)
+        unmet = sum(volume_step) - cleared_q
+        curtailed = res_t - cleared_q
+
+        results["quantity"][t] = cleared_q
+        results["price"][t] = clearing_price
+        results["producer_surplus"][t] = psurplus
+        results["consumer_surplus"][t] = csurplus
+        results["unmet_demand"][t] = unmet
+        results["curtailed_supply"][t] = curtailed
+
+    if plots:
+        ## === PLOTTING ===
+        plt.figure(figsize=(14,7))
+        temps_np = np.array(TIME)
+        temps_with_zero_np = np.array([t for t in TIME] + [T])
+
+        # 1. Market Price Plot
+        plt.subplot(2,2,1)
+
+        values_to_show = [round(p,2) for p in results["price"] if p > 0]
+        values_to_show.sort()
+        values_to_show_filtered = [x for i, x in enumerate(values_to_show) if i == 0 or abs(x - values_to_show[i-1]) >= 2]
+        index=1
+        while len(values_to_show_filtered) > 4:
+            values_to_show_filtered.remove(values_to_show_filtered[index])
+            index += 1
+            if index >= len(values_to_show_filtered):
+                index = index // 2
+
+        plt.step(temps_with_zero_np, np.append(results["price"], results["price"][-1]), where='post')
+        for p in values_to_show_filtered:
+            plt.axhline(y=p, linestyle='--', color='gray', linewidth=1)
+            plt.text(x=temps_with_zero_np[-1]+1.5, y=p, s=f'y={round(p)}', color='black', ha='left', va='bottom')
+        plt.xlabel("Time (h)")
+        plt.ylabel("Market Price (€/MWh)")
+        plt.title("Market Price Over Time")
+        plt.grid(True)
+
+
+        # 2. Market Clearing View
+        plt.subplot(2,2,2)
+
+        plt.step(temps_with_zero_np, np.append(Demand_volume[-1, :], Demand_volume[-1, -1]), label="Demand", where='post', color='red', linestyle='--', linewidth=1.5) 
+        plt.step(temps_with_zero_np, np.append(results["quantity"], results["quantity"][-1]), label="Supplied Energy", where='post', color='red') 
+        plt.bar(temps_np+0.5, RES, label="RES Production", color='green')
+        plt.xlabel("Time (h)")
+        plt.ylabel("Power (MW)")
+        bottom, top = plt.ylim()
+        plt.ylim(top=top*1.2)
+        plt.legend(loc='upper left')
+        plt.title("Market Clearing: Supply vs Demand Over Time")
+
+        # 3. Summary Bars for Unmet Demand, Curtailment and Market Metrics
+        ax1 = plt.subplot(2,2,3)
+
+        def engineering_notation(x, precision=3):
+            if x == 0:
+                return f"0"
+            exponent = int(np.floor(np.log10(abs(x)) // 3 * 3))
+            mantissa = x / (10 ** exponent)
+            return f"{mantissa:.{precision}g}e{exponent}"
+
+        # === Ax1: Energy metrics ===
+        ax1_labels = ["Unmet Demand", "Curtailed Production"]
+        ax1_heights = [sum(results["unmet_demand"]), sum(results["curtailed_supply"])]
+        x1 = np.arange(len(ax1_labels))
+
+        bars1 = ax1.bar(x1, ax1_heights, width=0.5, color='tab:red', label="Energy Metrics")
+        ax1.bar_label(bars1, [f"{engineering_notation(x)} MWh" for x in ax1_heights])
+        ax1.set_ylabel("Energy (MWh)")
+        ax1.set_ylim(0, max(ax1_heights) * 10)
+        ax1.set_yscale('symlog', linthresh=1e2)
+        ax1.tick_params(axis='y', colors='tab:red')
+        ax1.set_title("Market Metrics")
+        ax1.set_xticks(x1)
+        ax1.set_xticklabels(ax1_labels, rotation=20)
+
+        # === Ax2: Economic metrics ===
+        ax2 = plt.subplot(2,2,4)
+        ax2_labels = ["Consumer Surplus", "Producer Surplus"]
+        CS, PS = results["consumer_surplus"], results["producer_surplus"]
+        ax2_heights = [np.average(CS), np.average(PS)]
+        x2 = np.arange(len(ax2_labels))
+
+        bars2 = ax2.bar(x2, ax2_heights, width=0.5, color='tab:purple', label="Welfare Metrics")
+        ax2.bar_label(bars2, [f"{engineering_notation(x)} €/h" for x in ax2_heights])
+        ax2.set_ylabel("Average Amount per Hour (€/h)")
+        ax2.set_ylim(0, max(ax2_heights) * 10)
+        ax2.set_yscale('symlog', linthresh=10)
+        ax2.tick_params(axis='y', colors='tab:purple')
+        ax2.set_title("Market Metrics")
+        ax2.set_xticks(x2)
+        ax2.set_xticklabels(ax2_labels, rotation=20)
+
+        plt.tight_layout()
+
+    return results
