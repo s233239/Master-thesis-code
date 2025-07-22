@@ -131,10 +131,12 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
 
     y = [[1 - sum(u[t][k] for k in range(j+1)) for j in range(D)] for t in TIME]
 
+    price = [sum(residual_demand_price[j,t] * u[t][j] for j in range(D)) for t in TIME]
+
+    revenue = [revenue[t].getValue() for t in TIME]
+
     CS = [sum((Demand_price[j, t] - Demand_price[j+1, t]) * Demand_volume[j, t] * y[t][j]
                 for j in range(D-1)) for t in TIME]    # not necessary to include computation for last satisfied load bc it sets the price hence does not increase CS
-
-    price = [sum(residual_demand_price[j,t] * u[t][j] for j in range(D)) for t in TIME]
 
     if policy_type == "none":
         adjust_to_revenue = [0.0 for t in TIME]
@@ -150,15 +152,19 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
     unmet_demand = [max(Demand_volume[-1, t] - q_total[t], 0) for t in TIME]
     curtailed_prod = [max(-Demand_volume[-1, t] + q_total[t], 0) for t in TIME]
 
-    output = [[q_ch[t].getValue() for t in TIME],
-              [q_dis[t].getValue() for t in TIME],
-              [e[t].X for t in TIME],
-              price,
-              [revenue[t].getValue() for t in TIME],
-              CS,
-              adjust_to_revenue,
-              unmet_demand,
-              curtailed_prod]
+    PS = np.array([(q_total[t] - curtailed_prod[t]) * price[t] for t in TIME])
+
+    output = [[q_ch[t].getValue() for t in TIME],   # 0
+              [q_dis[t].getValue() for t in TIME],  # 1
+              [e[t].X for t in TIME],               # 2
+              price,                                # 3
+              revenue,                              # 4
+              adjust_to_revenue,                    # 5
+              y,                                    # 6
+              CS,                                   # 7
+              PS,                                   # 8
+              unmet_demand,                         # 9
+              curtailed_prod]                       # 10
     
 
     return state, output, u
