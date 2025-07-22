@@ -123,7 +123,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     temps_with_zero_np = np.array([t for t in TIME] + [T])
 
     # 1. Market Price Plot
-    plt.subplot(2,2,1)
+    # plt.subplot(2,2,1)
 
     values_to_show = [round(p,2) for p in market_price if p > 0]
     values_to_show.sort()
@@ -144,10 +144,15 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     plt.ylabel("Market Price (€/MWh)")
     plt.title("Market Price Over Time")
     plt.grid(True)
+    plt.tight_layout()
+
+    if plots:
+        plt.savefig(f"{season}-{n_players}players-market_price.pdf")
 
 
     # 2. Market Clearing View
-    plt.subplot(2,2,2)
+    # plt.subplot(2,2,2)
+    plt.figure(figsize=(14,7))
 
     plt.step(temps_with_zero_np, np.append(Demand_volume[-1, :], Demand_volume[-1, -1]), label="Demand", where='post', color='red', linestyle='--') 
     plt.bar(temps_np+0.5, RES, label="RES Production", color='green')
@@ -159,51 +164,74 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     plt.ylim(top=top*1.2)
     plt.legend(loc='upper left')
     plt.title("Market Clearing: Supply vs Demand Over Time")
+    plt.tight_layout()
 
-    # 3. Summary Bars for Unmet Demand, Curtailment and Market Metrics
-    ax1 = plt.subplot(2,2,3)
+    if plots:
+        plt.savefig(f"{season}-{n_players}players-market_clearing.pdf")
 
-    def engineering_notation(x, precision=3):
-        if x == 0:
-            return f"0"
-        exponent = int(np.floor(np.log10(abs(x)) // 3 * 3))
-        mantissa = x / (10 ** exponent)
-        return f"{mantissa:.{precision}g}e{exponent}"
+    # 3. Unmet Demand over time
+    # plt.subplot(2,2,3)
+    plt.figure(figsize=(14,7))
 
-    # === Ax1: Energy metrics ===
-    ax1_labels = ["Unmet Demand", "Curtailed Production"]
-    ax1_heights = [sum(unmet_demand), sum(curtailed_prod)]
-    x1 = np.arange(len(ax1_labels))
+    residual_demand = [max(Demand_volume[-1, t] - RES[t], 0) for t in TIME]
 
-    bars1 = ax1.bar(x1, ax1_heights, width=0.5, color='tab:red', label="Energy Metrics")
-    ax1.bar_label(bars1, [f"{engineering_notation(x)} MWh" for x in ax1_heights])
-    ax1.set_ylabel("Energy (MWh)")
-    ax1.set_ylim(0, max(ax1_heights) * 10)
-    ax1.set_yscale('symlog', linthresh=1e2)
-    ax1.tick_params(axis='y', colors='tab:red')
+    plt.step(temps_with_zero_np, np.append(unmet_demand, unmet_demand[-1]), where='post', label='Unmet Demand')
+    plt.step(temps_with_zero_np, np.append(residual_demand, residual_demand[-1]), where='post', color='red', linestyle='--', label='Residual Demand')
+    plt.xlabel("Time (h)")
+    plt.ylabel("Power (MW)")
+    plt.title("Unmet Demand Over Time")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
 
-    # === Ax2: Economic metrics ===
-    ax2_labels = ["Consumer Surplus", "Producer Surplus", "Social Welfare"]
-    ax2_heights = [np.average(CS), np.average(PS), np.average(SW)]                # Can be improved by stacking each CS[t], PS[t]
-    x2 = np.arange(len(ax2_labels)) + len(x1) + 0.5     # offset to avoid overlap
+    if plots:
+        plt.savefig(f"{season}-{n_players}players-unmet_demand.pdf")
 
-    ax2 = ax1.twinx()
-    bars2 = ax2.bar(x2, ax2_heights, width=0.5, color='tab:purple', label="Welfare Metrics")
-    ax2.bar_label(bars2, [f"{engineering_notation(x)} €/h" for x in ax2_heights])
-    ax2.set_ylabel("Average Amount per Hour (€/h)")
-    ax2.set_ylim(0, max(ax2_heights) * 10)
-    ax2.set_yscale('symlog', linthresh=10)
-    ax2.tick_params(axis='y', colors='tab:purple')
+    # # 3. Summary Bars for Unmet Demand, Curtailment and Market Metrics
+    # ax1 = plt.subplot(2,2,3)
 
-    xticks = np.concatenate([x1, x2])
-    xlabels = ax1_labels + ax2_labels
-    ax1.set_xticks(xticks)
-    ax1.set_xticklabels(xlabels, rotation=20)
+    # def engineering_notation(x, precision=3):
+    #     if x == 0:
+    #         return f"0"
+    #     exponent = int(np.floor(np.log10(abs(x)) // 3 * 3))
+    #     mantissa = x / (10 ** exponent)
+    #     return f"{mantissa:.{precision}g}e{exponent}"
 
-    ax1.set_title("Market Metrics")
+    # # === Ax1: Energy metrics ===
+    # ax1_labels = ["Unmet Demand", "Curtailed Production"]
+    # ax1_heights = [sum(unmet_demand), sum(curtailed_prod)]
+    # x1 = np.arange(len(ax1_labels))
+
+    # bars1 = ax1.bar(x1, ax1_heights, width=0.5, color='tab:red', label="Energy Metrics")
+    # ax1.bar_label(bars1, [f"{engineering_notation(x)} MWh" for x in ax1_heights])
+    # ax1.set_ylabel("Energy (MWh)")
+    # ax1.set_ylim(0, max(ax1_heights) * 10)
+    # ax1.set_yscale('symlog', linthresh=1e2)
+    # ax1.tick_params(axis='y', colors='tab:red')
+
+    # # === Ax2: Economic metrics ===
+    # ax2_labels = ["Consumer Surplus", "Producer Surplus", "Social Welfare"]
+    # ax2_heights = [np.average(CS), np.average(PS), np.average(SW)]                # Can be improved by stacking each CS[t], PS[t]
+    # x2 = np.arange(len(ax2_labels)) + len(x1) + 0.5     # offset to avoid overlap
+
+    # ax2 = ax1.twinx()
+    # bars2 = ax2.bar(x2, ax2_heights, width=0.5, color='tab:purple', label="Welfare Metrics")
+    # ax2.bar_label(bars2, [f"{engineering_notation(x)} €/h" for x in ax2_heights])
+    # ax2.set_ylabel("Average Amount per Hour (€/h)")
+    # ax2.set_ylim(0, max(ax2_heights) * 10)
+    # ax2.set_yscale('symlog', linthresh=10)
+    # ax2.tick_params(axis='y', colors='tab:purple')
+
+    # xticks = np.concatenate([x1, x2])
+    # xlabels = ax1_labels + ax2_labels
+    # ax1.set_xticks(xticks)
+    # ax1.set_xticklabels(xlabels, rotation=20)
+
+    # ax1.set_title("Market Metrics")
 
     # 4. Optimized Profits
-    ax1 = plt.subplot(2,2,4)
+    # ax1 = plt.subplot(2,2,4)
+    _, ax1 = plt.subplots(figsize=(14,7))
 
     player_labels = [f"{chr(65 + p)}" for p in range(n_players)]
     width = 0.3
@@ -228,7 +256,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     plt.tight_layout()
     if plots:
-        plt.savefig(f"{bidding_zone+season}-{n_players}players-main_market_results.pdf")
+        plt.savefig(f"{season}-{n_players}players-profits.pdf")
 
 
     # 5. Production and SoC per Player
@@ -253,7 +281,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     fig.tight_layout()
     if plots:
-        plt.savefig(f"{bidding_zone+season}-{n_players}players-storage_soc.pdf")
+        plt.savefig(f"{season}-{n_players}players-storage_soc.pdf")
 
 
     # 6. Nash Equilibrium Result
@@ -303,8 +331,8 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     plt.legend()
 
     plt.tight_layout()
-    if plots:
-        plt.savefig(f"{bidding_zone+season}-{n_players}players-cournot_metrics.pdf")
+    # if plots:
+    #     plt.savefig(f"{bidding_zone+season}-{n_players}players-cournot_metrics.pdf")
 
     return
 

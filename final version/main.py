@@ -14,9 +14,11 @@ from functions_plots import *
 from functions_model import *
 
 
-def main(season="Winter", plots=True, data_plots=False, scenario_plots=False, save_plots=False,
-         bidding_zone="DK2", n_players=4, alpha_batt=0.5, min_eta=0.85,
-         OC_default=5, storage_Crate_default=0.5, N=10, D=20, tol=1e-5, max_iter=200,
+def main(season="Winter", bidding_zone="DK2", n_players=4, 
+         storage_capacity=None,
+         alpha_batt=0.5, min_eta=0.85, OC_default=5, storage_Crate_default=0.5, N=10, 
+         D=20, tol=1e-5, max_iter=200,
+         plots=True, data_plots=False, scenario_plots=False, save_plots=False,
          policy_type="none", policy_parameters=None):
     
     # Diverse parameters
@@ -46,8 +48,9 @@ def main(season="Winter", plots=True, data_plots=False, scenario_plots=False, sa
         return output
 
     ## Load Battery Parameters
-    OC_all, Eta_all, E_max_all, Q_max_all, Q_all = load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_default, N, 
-                                                                    plots=scenario_plots, bidding_zone=bidding_zone, season=season)
+    OC_all, Eta_all, E_max_all, Q_max_all, Q_all = load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_default, N,
+                                                                     storage_capacity=storage_capacity, 
+                                                                     plots=scenario_plots, bidding_zone=bidding_zone, season=season)
 
     ## === PLOTTING: loaded data for the modelled scenario ===
     if scenario_plots:
