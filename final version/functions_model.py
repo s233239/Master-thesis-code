@@ -7,11 +7,17 @@ from functions_policy import apply_policy_to_revenue
 
 
 # Function containing the optimisation model
-def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters, state_ini=([],[]), policy=None):
+def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, 
+              policy_type, policy_parameters, reserve_policy:bool,
+              state_ini=([],[])):
 
     # Unpack variables
     [max_iter, TIME, T, D, N, RES, Demand_volume, Demand_price, diff_table_initial] = model_parameters
     [alpha_batt, OC_all, Eta_all, E_max_all, Q_max_all, Q_all] = storage_parameters
+
+    # Policy-related parameters
+    if reserve_policy:
+        [T_reserve, price_reserve, Q_reserve] = policy_parameters
 
     # Initialization of model parameters
     # Data: RES[t], Demand_price[j,t], Demand_volume[j,t] - t in TIME, j in range(D)
@@ -62,6 +68,14 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
         OC_all[player] * (q_dis[t] + q_ch[t])
         for t in TIME
     }
+
+    # Apply reserve policy
+    if reserve_policy:
+        revenue = {t: 
+                   revenue[t] + price_reserve*Q_reserve*Q_max_all[player] if t in T_reserve 
+                   else revenue[t] 
+                   for t in TIME
+                   }
     
     # Apply policy constraints to revenue computations
     if policy_type != "none":
@@ -105,6 +119,11 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
         # Force convergence
         model.addConstrs(z_ch[t,i] == state_ini[0][t,i] for t in TIME for i in range(N))
         model.addConstrs(z_dis[t,i] == state_ini[1][t,i] for t in TIME for i in range(N))
+
+
+    # Apply reserve policy
+    if reserve_policy:
+        model.addConstrs(e[t] >= Q_reserve*Q_max_all[player] for t in T_reserve)
 
 
     # Optimization of the model
@@ -195,7 +214,10 @@ def arrays_are_equal(a1, a2, n_players, diff_table, tol=1e-7):
     return are_equal, diff_table
 
 
-def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, storage_parameters, policy_type, policy_parameters, tol=1e-7):
+def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, 
+            model_parameters, storage_parameters, 
+            policy_type, policy_parameters, reserve_policy, 
+            tol=1e-7):
 
     ne = [[], []]
     state = {}
@@ -211,7 +233,7 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, st
     iter = 0
     for player in range(n_players):
         # Initialize optimization model
-        state[player], output[player], u[player] = model_run(q_ch_assumed_ini, q_dis_assumed_ini, player, model_parameters, storage_parameters, policy_type, policy_parameters)
+        state[player], output[player], u[player] = model_run(q_ch_assumed_ini, q_dis_assumed_ini, player, model_parameters, storage_parameters, policy_type, policy_parameters, reserve_policy)
 
         # Store profits for later plots
         profits[player].append(sum(output[player][4][t] for t in TIME))
@@ -234,7 +256,7 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, st
         for player in range(n_players):
             q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
             q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-            state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters)
+            state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters, reserve_policy)
             
             # Store profits for later plots
             profits[player].append(sum(output[player][4][t] for t in TIME))
@@ -257,14 +279,14 @@ def nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, st
                 for player in range(p+1):
                     q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
                     q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters, 
+                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters, reserve_policy, 
                                                                          state_ini=(np.array(state[player][0]), np.array(state[player][1])))  
                     profits[player].append(sum(output[player][4][t] for t in TIME))      
 
                 for player in range(p+1, n_players):
                     q_ch_assumed = [sum(output[p][0][t] for p in range(n_players) if p != player) for t in TIME]
                     q_dis_assumed = [sum(output[p][1][t] for p in range(n_players) if p != player) for t in TIME]
-                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters)
+                    state[player], output[player], u[player] = model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_parameters, policy_type, policy_parameters, reserve_policy)
                     profits[player].append(sum(output[player][4][t] for t in TIME))
 
                 state_sys = [state[player] for player in range(n_players)]

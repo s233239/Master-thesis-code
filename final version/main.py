@@ -19,7 +19,7 @@ def main(season="Winter", bidding_zone="DK2", n_players=4,
          alpha_batt=0.5, min_eta=0.85, OC_default=5, storage_Crate_default=0.5, N=10, 
          D=20, tol=1e-5, max_iter=200,
          plots=True, data_plots=False, scenario_plots=False, save_plots=False,
-         policy_type="none", policy_parameters=None):
+         policy_type="none", policy_parameters=None, reserve_policy=False):
     
     # Diverse parameters
     diff_table_initial = []     # Store the difference between model outputs for each iteration
@@ -70,7 +70,10 @@ def main(season="Winter", bidding_zone="DK2", n_players=4,
     storage_parameters = [alpha_batt, OC_all, Eta_all, E_max_all, Q_max_all, Q_all]
 
     # Cournot iteration of the profit optimization model
-    output, ne, iter, u, profits, diff_table = nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, model_parameters, storage_parameters, policy_type, policy_parameters, tol)
+    output, ne, iter, u, profits, diff_table = nash_eq(q_ch_assumed_ini, q_dis_assumed_ini, n_players, 
+                                                       model_parameters, storage_parameters, 
+                                                       policy_type, policy_parameters, reserve_policy,
+                                                       tol)
     if plots:
         plot_results(output, profits, diff_table, n_players, model_parameters, storage_parameters, save_plots, bidding_zone, season)
         plt.show()
