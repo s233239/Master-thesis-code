@@ -371,38 +371,60 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_de
         if bidding_zone is None or season is None:
             raise ValueError("bidding_zone and season must be provided if plots=True")
 
-        fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+        # fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
         x = range(len(Residual))
 
         # Plot 1: Residual and Residual Corrected
-        axs[0].bar(x, Residual_corrected, color='tab:orange',
+        fig0, ax0 = plt.subplots(figsize=(12, 6))
+        ax0.bar(x, Residual_corrected, color='tab:orange',
                    label='Residual Corrected (inefficiency)', align='edge')
-        axs[0].bar(x, Residual, color='tab:blue',
+        ax0.bar(x, Residual, color='tab:blue',
                    label='Residual (Demand - RES)', align='edge')
-        axs[0].axhline(PowerRating_available, color='tab:red', linestyle='--',
+        ax0.axhline(PowerRating_available, color='tab:red', linestyle='--',
                        label='[max] Available Storage Power (MW)')
-        axs[0].axhline(0, color='black', linestyle='--', linewidth=0.8)
-        axs[0].set_title('Residual Demand vs Corrected Residual')
-        axs[0].set_ylabel('Power [MW]')
-        axs[0].legend()
-        axs[0].grid(True)
+        ax0.axhline(0, color='black', linestyle='--', linewidth=0.8)
+        ax0.set_title('Residual Demand vs Corrected Residual')
+        ax0.set_ylabel('Power [MW]')
+        ax0.legend()
+        ax0.grid(True)
+        fig0.tight_layout()
 
         # Plot 2: Cumulative and Local Cumulative
-        axs[1].plot(Cummul_res_corr, label='Cumulative Residual Corrected',
-                    color='tab:green', marker='.')
-        axs[1].plot(Local_cumul, label='Local Cumulative (Storage Level)',
-                    color='tab:red', marker='.')
-        axs[1].axhline(Capacity_req, color='tab:orange', linestyle='--',
+        fig1, ax1 = plt.subplots(figsize=(12, 6))
+        ax1.bar(x, Residual_corrected, color='blue',
+                   label='Residual Corrected (efficiency-adjusted)', align='edge')
+        ax1.bar(x, Residual, color='lightskyblue',
+                   label='Residual (Demand - RES)', align='edge')
+        ax1.plot(Local_cumul, label='Local Cumulative (Storage Level)',
+                    color='green', marker='.')
+        ax1.plot(Cummul_res_corr, label='Cumulative Residual Corrected',
+                    color='blue', marker='.')
+        ax1.axhline(Capacity_req, color='red', linestyle='--', linewidth=2,
                        label='Required Energy Capacity (MWh)')
-        axs[1].axhline(0, color='black', linestyle='--', linewidth=0.8)
-        axs[1].set_title('Cumulative Imbalance and Virtual Storage Level')
-        axs[1].set_xlabel('Hour')
-        axs[1].set_ylabel('Energy [MWh]')
-        axs[1].legend()
-        axs[1].grid(True)
+        ax1.axhline(0, color='black', linestyle='--', linewidth=0.8)
+        ax1.set_title('Cumulative Imbalance and Virtual Storage Level')
+        ax1.set_xlabel('Hour')
+        ax1.set_ylabel('Energy [MWh]')
 
-        plt.tight_layout()
-        # plt.savefig(f"{bidding_zone+season}-storage_characteristics.png")
+        # Get handles and labels
+        handles, labels = plt.gca().get_legend_handles_labels()
+
+        # Create a dictionary and sort it as desired
+        label_order = ['Residual (Demand - RES)', 
+                       'Residual Corrected (efficiency-adjusted)',
+                       'Cumulative Residual Corrected',
+                       'Local Cumulative (Storage Level)',
+                       'Required Energy Capacity (MWh)']
+        sorted_handles_labels = sorted(zip(handles, labels), key=lambda x: label_order.index(x[1]))
+
+        # Unzip and pass to legend
+        sorted_handles, sorted_labels = zip(*sorted_handles_labels)
+        ax1.legend(sorted_handles, sorted_labels)
+
+        ax1.grid(True)
+        fig1.tight_layout()
+        fig1.savefig(f"{season}-storage_capacity.pdf")
+
 
     return OC_all, Eta_all, E_max_all, Q_max_all, Q_all
 
