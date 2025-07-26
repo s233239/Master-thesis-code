@@ -318,10 +318,9 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_de
                                     # minimum of sliced list[:t]
 
     # Minimum total amount of energy the battery must store to satisfy the demand at any time step > informs E_max
+    Capacity_req = int(np.ceil(np.max(Local_cumul)))  # MWh total required
     if storage_capacity:
-        Capacity_req = storage_capacity
-    else:
-        Capacity_req = int(np.ceil(np.max(Local_cumul)))  # MWh total required
+        Capacity_req = storage_capacity*Capacity_req
 
     # Minimum instantaneous power the storage system need to have to satisfy the demand at any time step > informs Q_max
     # PowerRating_req = np.max(np.abs(Residual_corrected))    

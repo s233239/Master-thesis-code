@@ -126,20 +126,29 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     # plt.subplot(2,2,1)
 
     values_to_show = [round(p,2) for p in market_price if p > 0]
-    values_to_show.sort()
-    values_to_show_filtered = [x for i, x in enumerate(values_to_show) if i == 0 or abs(x - values_to_show[i-1]) >= 2]
-    index=1
-    while len(values_to_show_filtered) > 4:
-        values_to_show_filtered.remove(values_to_show_filtered[index])
-        index += 1
-        if index >= len(values_to_show_filtered):
-            index = index // 2
+    values_to_show.sort(reverse=True)
+    # values_to_show_filtered = [x for i, x in enumerate(values_to_show) if i == 0 or abs(x - values_to_show[i-1]) >= 2]
+    # index=1
+    # while len(values_to_show_filtered) > 4:
+    #     values_to_show_filtered.remove(values_to_show_filtered[index])
+    #     index += 1
+    #     if index >= len(values_to_show_filtered):
+    #         index = index // 2
+
+    values_to_show_filtered = []
+    for i in range(5):
+        if len(values_to_show) > i:
+            if i == 0:
+                values_to_show_filtered.append(values_to_show[i])
+            else:
+                if abs(values_to_show[i] - values_to_show_filtered[-1]) >=2 :
+                    values_to_show_filtered.append(values_to_show[i])
 
     for player in range(n_players):
         plt.step(temps_with_zero_np, np.append(output[player][3], output[player][3][-1]), where='post')
     for p in values_to_show_filtered:
         plt.axhline(y=p, linestyle='--', color='gray', linewidth=1)
-        plt.text(x=temps_with_zero_np[-1]+1.5, y=p, s=f'y={round(p)}', color='black', ha='left', va='bottom')
+        plt.text(x=temps_with_zero_np[-1]+1.5, y=p, s=f'y={round(p,1)}', color='black', ha='left', va='bottom')
     plt.xlabel("Time (h)")
     plt.ylabel("Market Price (€/MWh)")
     plt.title("Market Price Over Time")

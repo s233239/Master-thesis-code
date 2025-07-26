@@ -17,7 +17,8 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
 
     # Policy-related parameters
     if reserve_policy:
-        [T_reserve, price_reserve, Q_reserve] = policy_parameters
+        [T_reserve, price_reserve, Q_reserve, penalty_reserve] = policy_parameters
+        T_reserve = T_reserve[player]
 
     # Initialization of model parameters
     # Data: RES[t], Demand_price[j,t], Demand_volume[j,t] - t in TIME, j in range(D)
@@ -71,11 +72,9 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
 
     # Apply reserve policy
     if reserve_policy:
-        revenue = {t: 
-                   revenue[t] + price_reserve*Q_reserve*Q_max_all[player] if t in T_reserve 
-                   else revenue[t] 
-                   for t in TIME
-                   }
+        slack_reserve = model.addVars(TIME, lb=0, name="Reserved amount the storage fails to meet")
+
+        revenue[T_reserve] += price_reserve*Q_reserve*Q_max_all[player] - slack_reserve[T_reserve-1]*penalty_reserve
     
     # Apply policy constraints to revenue computations
     if policy_type != "none":
@@ -123,7 +122,7 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
 
     # Apply reserve policy
     if reserve_policy:
-        model.addConstrs(e[t] >= Q_reserve*Q_max_all[player] for t in T_reserve)
+        reserve_constraint = model.addConstr(e[T_reserve-1] + slack_reserve[T_reserve-1] >= Q_reserve*Q_max_all[player])
 
 
     # Optimization of the model
@@ -132,14 +131,14 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
     if model.status != GRB.OPTIMAL:
         print(f"Model status: {model.status}")
 
-        if model.status == GRB.INFEASIBLE:
-            print("Model is infeasible. Computing IIS...")
-            model.computeIIS()
-            model.write("infeasible.ilp")
+        # if model.status == GRB.INFEASIBLE:
+        #     print("Model is infeasible. Computing IIS...")
+        #     model.computeIIS()
+        #     model.write("infeasible.ilp")
 
-        model.Params.OutputFlag = 1
-        model.Params.LogFile = "gurobi_log.txt"
-        model.write("myLP_model.lp")
+        # model.Params.OutputFlag = 1
+        # model.Params.LogFile = "gurobi_log.txt"
+        # model.write("myLP_model.lp")
 
         return None
 
@@ -178,17 +177,35 @@ def model_run(q_ch_assumed, q_dis_assumed, player, model_parameters, storage_par
 
     PS = np.array([(q_total[t] - curtailed_prod[t]) * price[t] for t in TIME])
 
-    output = [[q_ch[t].getValue() for t in TIME],   # 0
-              [q_dis[t].getValue() for t in TIME],  # 1
-              [e[t].X for t in TIME],               # 2
-              price,                                # 3
-              revenue,                              # 4
-              adjust_to_revenue,                    # 5
-              y,                                    # 6
-              CS,                                   # 7
-              PS,                                   # 8
-              unmet_demand,                         # 9
-              curtailed_prod]                       # 10
+    if reserve_policy:
+        slack_value = slack_reserve[T_reserve].X
+        binding_flag = 1 if abs(reserve_constraint.slack) < 1e-4 else 0
+
+        output = [[q_ch[t].getValue() for t in TIME],   # 0
+                [q_dis[t].getValue() for t in TIME],  # 1
+                [e[t].X for t in TIME],               # 2
+                price,                                # 3
+                revenue,                              # 4
+                adjust_to_revenue,                    # 5
+                y,                                    # 6
+                CS,                                   # 7
+                PS,                                   # 8
+                unmet_demand,                         # 9
+                curtailed_prod,                       # 10
+                slack_value,
+                binding_flag]
+    else:
+        output = [[q_ch[t].getValue() for t in TIME],   # 0
+                [q_dis[t].getValue() for t in TIME],  # 1
+                [e[t].X for t in TIME],               # 2
+                price,                                # 3
+                revenue,                              # 4
+                adjust_to_revenue,                    # 5
+                y,                                    # 6
+                CS,                                   # 7
+                PS,                                   # 8
+                unmet_demand,                         # 9
+                curtailed_prod]                        # 10    
     
 
     return state, output, u
