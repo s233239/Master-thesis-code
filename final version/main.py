@@ -16,7 +16,7 @@ from functions_model import *
 
 def main(season="Winter", bidding_zone="DK2", n_players=4, 
          storage_capacity=None,
-         alpha_batt=0.5, min_eta=0.85, OC_default=5, storage_Crate_default=0.5, N=10, 
+         alpha_batt=0.5, min_eta=0.85, OC_default=0.5, storage_Crate_default=0.5, N=10, 
          D=20, tol=1e-5, max_iter=200,
          plots=True, data_plots=False, scenario_plots=False, save_plots=False,
          policy_type="none", policy_parameters=None, reserve_policy=False):
