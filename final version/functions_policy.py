@@ -31,6 +31,7 @@ def apply_policy_to_revenue(revenue: dict,
             - threshold (float)
             - base_tariff (float)
             - floor_tariff (float)
+            - colocation_policy (bool)
             - ...
             # - P_max (float)
             # - payment_rate (float)
@@ -61,7 +62,7 @@ def apply_policy_to_revenue(revenue: dict,
         elif policy_type == "grid_tariff_hourly":
             min_val = kwargs.get("min_val", 2.0)
             max_val = kwargs.get("max_val", 5.0)
-            season = kwargs.get("season", "Summer")
+            season = kwargs.get("season", "Winter")
             
             tau_ch = generate_hourly_tariff_vector('charging', season, min_val, max_val)
             tau_dis = generate_hourly_tariff_vector('discharging', season, min_val, max_val)
@@ -76,20 +77,27 @@ def apply_policy_to_revenue(revenue: dict,
             tau_ch = compute_charging_tariff_from_residual_demand(residual_series, alpha, threshold, base_tariff, floor_tariff)
             tau_dis = compute_discharging_tariff_from_residual_demand(residual_series, alpha, threshold, base_tariff, floor_tariff)
 
+        # Get co-location policy parameter
+        colocation_policy = kwargs.get("colocation_policy", False)
+        if colocation_policy:
+            tau_ch = [0 for t in TIME]
+        
         # Now compute the adjusted tariff revenue based on the corresponding tariffs
         grid_cost = [(q_charge[t] * tau_ch[t]) + 
                      (q_discharge[t] * tau_dis[t]) for t in TIME]
         adjust_to_revenue = [adjust_to_revenue[t] - grid_cost[t] for t in TIME]
 
-    if policy_type in ["capacity", "all"]:
-        E_max = kwargs.get("E_max", 0.0)
-        payment_rate = kwargs.get("payment_rate", 0.0)
-        adjust_to_revenue += E_max * payment_rate
+    else:
+        raise ValueError("Wrong policy name.")
+    # if policy_type in ["capacity", "all"]:
+    #     E_max = kwargs.get("E_max", 0.0)
+    #     payment_rate = kwargs.get("payment_rate", 0.0)
+    #     adjust_to_revenue += E_max * payment_rate
 
-    if policy_type in ["curtailment", "all"]:
-        q_charge_curt = kwargs.get("q_charge_curt", np.zeros_like(q_charge))
-        price_curt = kwargs.get("price_curt", 0.0)
-        adjust_to_revenue += np.sum(q_charge_curt) * price_curt
+    # if policy_type in ["curtailment", "all"]:
+    #     q_charge_curt = kwargs.get("q_charge_curt", np.zeros_like(q_charge))
+    #     price_curt = kwargs.get("price_curt", 0.0)
+    #     adjust_to_revenue += np.sum(q_charge_curt) * price_curt
 
     return adjust_to_revenue
 
@@ -110,10 +118,10 @@ def generate_hourly_tariff_vector(mode='discharging', season='Summer', min_val=2
     """
     if mode not in ['charging', 'discharging']:
         raise ValueError("mode must be either 'charging' or 'discharging'")
-    if season not in ['Summer', 'Winter']:
-        raise ValueError("season must be either 'summer' or 'winter'")
+    if season not in ['Summer', 'Winter','LowLoad']:
+        raise ValueError("season must be either Summer, Winter or LowLoad")
 
-    if season == 'Summer':
+    if season in ['Summer', 'LowLoad']:
         # High demand during midday -> low tariffs for discharging
         base_pattern = [
             1.0, 1.0, 1.0, 0.93, 0.93, 0.83,   # 00:00–05:00
@@ -201,100 +209,4 @@ def compute_discharging_tariff_from_residual_demand(residual_series, alpha=0.05,
     return tariff
 
 
-# Deprecated because of non-linear computations
-def compute_discharging_tariff_from_price(price_series, alpha=0.01, threshold=10, base_tariff=5, floor_tariff=0):
-    """
-    Compute dynamic discharging grid tariff based on market price.
-
-    Parameters:
-        price_series (list or array): Market price time series (€/MWh)
-        alpha (float): Sensitivity of the tariff to price above threshold.
-        threshold (float): Price (€/MWh) above which tariff starts decreasing.
-        base_tariff (float): Base discharging grid tariff (€/MWh).
-        floor_tariff (float): Minimum allowable grid tariff (€/MWh).
-
-    Returns:
-        discharging_tariff (list): Hourly grid tariffs for discharging (€/MWh)
-    """
-    TIME = range(len(price_series))
-    if threshold is None:
-        # tariff = base_tariff - alpha * price
-        tariff = [base_tariff * (1 - alpha * price_series[t]) for t in TIME]       
-    else:
-        raise ValueError("Dynamic tariffs have not been modelled to include a price threshold from which tariffs will decrease [ongoing]")
-        # if alpha > 0:
-        #     # tariff = base_tariff - alpha * (price - threshold)
-        #     tariff = np.where(price_series < threshold, base_tariff, base_tariff * (1 - alpha * (price_series - threshold)))
-        # else:
-        #     tariff = np.where(price_series < threshold, base_tariff, floor_tariff)
-
-    for t in TIME:
-        tariff[t] = gp.max_(tariff[t], floor_tariff)
-
-    return tariff
-
-
-# # Aggregator Function for All Policies
-# def apply_storage_policies(q_charge: np.ndarray, q_discharge: np.ndarray,
-#                            tau_ch: Union[float, np.ndarray], tau_dis: Union[float, np.ndarray],
-#                            P_max: float, payment_rate: float,
-#                            q_charge_curt: np.ndarray, price_curt: float) -> float:
-#     """
-#     Aggregates the economic effects of all three policies on storage.
-
-#     Returns:
-#         total_policy_value (float): Combined revenue/cost effect from all policies.
-#     """
-#     tariff_cost = grid_tariff_cost(q_charge, q_discharge, tau_ch, tau_dis)
-#     cap_payment = capacity_payment(P_max, payment_rate)
-#     curt_revenue = curtailment_compensation(q_charge_curt, price_curt)
-#     return -tariff_cost + cap_payment + curt_revenue
-
-
-# # Grid Tariff Policy
-# def grid_tariff_cost(q_charge: np.ndarray, q_discharge: np.ndarray,
-#                      tau_ch: Union[float, np.ndarray], tau_dis: Union[float, np.ndarray]) -> float:
-#     """
-#     Computes the total grid tariff cost applied to charging and discharging.
-
-#     Parameters:
-#         q_charge (np.ndarray): Charging quantities (MWh per hour)
-#         q_discharge (np.ndarray): Discharging quantities (MWh per hour)
-#         tau_ch (float or np.ndarray): Charging tariff (€/MWh)
-#         tau_dis (float or np.ndarray): Discharging tariff (€/MWh)
-
-#     Returns:
-#         grid_cost (float): Total cost from applying tariffs on storage operation.
-#     """
-#     return np.sum(q_charge * tau_ch) + np.sum(q_discharge * tau_dis)
-
-
-# # Capacity Payment Policy
-# def capacity_payment(P_max: float, payment_rate: float) -> float:
-#     """
-#     Computes the total capacity remuneration for a given max power.
-
-#     Parameters:
-#         P_max (float): Maximum discharge capacity (MW)
-#         payment_rate (float): Payment rate (€/MW capacity)
-
-#     Returns:
-#         payment (float): Capacity payment received.
-#     """
-#     return P_max * payment_rate
-
-
-# # Curtailment Compensation Policy
-# def curtailment_compensation(q_charge_curt: np.ndarray, price_curt: float) -> float:
-#     """
-#     Computes compensation for charging from curtailed renewable energy.
-
-#     Parameters:
-#         q_charge_curt (np.ndarray): Charging from curtailed energy (MWh per hour)
-#         price_curt (float): Compensation rate (€/MWh charged from curtailment)
-
-#     Returns:
-#         compensation (float): Total compensation received for curtailment absorption.
-#     """
-#     return np.sum(q_charge_curt) * price_curt
 

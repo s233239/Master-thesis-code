@@ -118,7 +118,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
 
     ## === PLOTTING ===
-    plt.figure(figsize=(14,7))
+    plt.figure(figsize=(8,4))
     temps_np = np.array(TIME)
     temps_with_zero_np = np.array([t for t in TIME] + [T])
 
@@ -151,7 +151,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
         plt.text(x=temps_with_zero_np[-1]+1.5, y=p, s=f'y={round(p,1)}', color='black', ha='left', va='bottom')
     plt.xlabel("Time (h)")
     plt.ylabel("Market Price (€/MWh)")
-    plt.title("Market Price Over Time")
+    # plt.title("Market Price Over Time")
     plt.grid(True)
     plt.tight_layout()
 
@@ -161,7 +161,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     # 2. Market Clearing View
     # plt.subplot(2,2,2)
-    plt.figure(figsize=(14,7))
+    plt.figure(figsize=(8,4))
 
     plt.step(temps_with_zero_np, np.append(Demand_volume[-1, :], Demand_volume[-1, -1]), label="Demand", where='post', color='red', linestyle='--') 
     plt.bar(temps_np+0.5, RES, label="RES Production", color='green')
@@ -172,7 +172,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     bottom, top = plt.ylim()
     plt.ylim(top=top*1.2)
     plt.legend(loc='upper left')
-    plt.title("Market Clearing: Supply vs Demand Over Time")
+    # plt.title("Market Clearing: Supply vs Demand Over Time")
     plt.tight_layout()
 
     if plots:
@@ -180,7 +180,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     # 3. Unmet Demand over time
     # plt.subplot(2,2,3)
-    plt.figure(figsize=(14,7))
+    plt.figure(figsize=(8,4))
 
     residual_demand = [max(Demand_volume[-1, t] - RES[t], 0) for t in TIME]
 
@@ -188,7 +188,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     plt.step(temps_with_zero_np, np.append(residual_demand, residual_demand[-1]), where='post', color='red', linestyle='--', label='Residual Demand')
     plt.xlabel("Time (h)")
     plt.ylabel("Power (MW)")
-    plt.title("Unmet Demand Over Time")
+    # plt.title("Unmet Demand Over Time")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
@@ -240,7 +240,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     # 4. Optimized Profits
     # ax1 = plt.subplot(2,2,4)
-    _, ax1 = plt.subplots(figsize=(14,7))
+    _, ax1 = plt.subplots(figsize=(8,4))
 
     player_labels = [f"{chr(65 + p)}" for p in range(n_players)]
     width = 0.3
@@ -270,31 +270,53 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     # 5. Production and SoC per Player
     # Ax 1 for energy storage levels, ax 2 for energy storage discharging/charging power
-    fig, ax1 = plt.subplots(figsize=(14,7))
+    fig, ax1 = plt.subplots(figsize=(8,4))
 
     for player in range(n_players):
         ax1.plot(temps_with_zero_np, batt[player], label=f"SoC for Player {player + 1}")
-    ax1.set_ylim(bottom=0)  # top=max(E_max_all)
+    # ax1.axhline(y=0, color='grey', linewidth=1)
     ax1.set_xlabel("Time (h)")
     ax1.set_ylabel("Battery State of Charge (MWh)")
-    ax1.legend(loc="upper left")
-    ax1.set_title("Battery Cycle")
 
     ax2 = ax1.twinx()
     for player in range(n_players):
         ax2.step(temps_with_zero_np, proad[player] + [proad[player][-1]], where="post", label=f"Supply from Player {player + 1}", linestyle='--', linewidth=0.9)
     ax2.axhline(y=0, color='black', linewidth=1)
     ax2.set_ylabel('Power [MW]')
+
+    ax1.legend(loc="upper left")
     ax2.legend(loc='upper right')
+    # plt.title("Battery cycle")
+
+    # # After plotting everything and setting limits:
+    # fig.canvas.draw()  # Ensures that tick positions are computed
+
+    # # Get the current number of ticks from each axis
+    # n_ticks = max(len(ax1.get_yticks()), len(ax2.get_yticks()))
+
+    # # Generate evenly spaced ticks for both axes using their limits
+    # bottom, top = ax1.get_ylim()
+    # ax1_ticks = np.array(ax1.get_yticks())
+    # ax1_tickdiff = ax1_ticks[1] - ax1_ticks[0]
+    # n_diff = int(n_ticks - len(ax1_ticks))
+    # if n_diff > 0:
+    #     new_ticks = np.array([int(ax1_ticks[-1]) + n*int(ax1_tickdiff) for n in range(1, n_diff)])
+    #     ax1.set_yticks(np.concatenate((ax1_ticks, new_ticks)))
+
+
+    # # Draw grid (on ax1 so grid spans figure width)
+    # ax1.grid(True)
     ax2.grid()
 
-    fig.tight_layout()
+    plt.tight_layout()
+
     if plots:
         plt.savefig(f"{season}-{n_players}players-storage_soc.pdf")
 
 
+
     # 6. Nash Equilibrium Result
-    plt.figure(figsize=(14,7))
+    plt.figure(figsize=(8,4))
     x = range(1, len(profits[0]) + 1)
     if len(x) <= 20:
         xticks = np.array([1]+[2+2*i for i in range(int(np.floor(len(x)/2)))])
@@ -346,7 +368,7 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
     return
 
 
-def plot_scenarios_analysis(outputs, model_parameters=None):
+def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     """
     Generate comparative plots of market and player metrics across multiple policy scenarios.
 
@@ -367,7 +389,7 @@ def plot_scenarios_analysis(outputs, model_parameters=None):
     TIME = range(T)
     
     # --- 1) Market price over time ---
-    plt.figure(figsize=(14, 7))
+    plt.figure(figsize=(15,10))
     plt.subplot(2,2,1)
     for j, scen in enumerate(scenario_names):
         # Price is same across players, take player 0 for reference
@@ -463,12 +485,15 @@ def plot_scenarios_analysis(outputs, model_parameters=None):
 
     plt.tight_layout()
 
+    if plots:
+        plt.savefig("figs_policies/tariffs_results")
+
 
     # --- Other subplot: Revenue over time (aggregated over players) ---
     bar_width = 0.8 / n_scenarios
     x = np.arange(len(TIME))
 
-    plt.figure(figsize=(14, 7))
+    plt.figure(figsize=(15, 10))
 
     for j, scen in enumerate(scenario_names):
         # Aggregate over players
@@ -492,6 +517,9 @@ def plot_scenarios_analysis(outputs, model_parameters=None):
     tariff_legend = [Patch(facecolor='gray', hatch='//', label="tariff cost", edgecolor='black')]
     plt.legend(handles=scenario_legend + tariff_legend, loc="upper right", ncol=2)
     plt.tight_layout()
+
+    if plots:
+        plt.savefig("figs_policies/tariffs-players_revenue")
 
 
     # --- Tariffs Plots ---

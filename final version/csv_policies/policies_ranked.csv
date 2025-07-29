@@ -1,0 +1,43 @@
+Policy,Normalized Sum,Dominance Score,Rank Score
+reserve_policy - Summer,4.340067069509541,153,91.0
+reserve_policy - Winter,4.511066120969389,185,107.0
+baseline - Winter,5.213628306118007,193,135.0
+baseline - Summer,5.213628306118007,193,135.0
+baseline - LowLoad,5.213628306118007,193,135.0
+reserve_policy - LowLoad,8.056926313510775,329,135.0
+storage 1 co-located + hourly_tariff - Summer,4.9481362489131415,190,137.0
+both co-located + flat_tariff - LowLoad,5.12854735624308,196,140.0
+storage 2 co-located + hourly_tariff - Summer,5.038943923870303,176,140.0
+both co-located + dynamic_tariff - LowLoad,5.12854735624308,196,140.0
+baseline + dynamic_tariff - Summer,5.173271534274911,187,149.0
+storage 2 co-located + dynamic_tariff - Summer,5.034177812715048,183,150.0
+both co-located + dynamic_tariff - Summer,5.2633864266465595,204,159.0
+both co-located + flat_tariff - Summer,5.2633864266465595,204,159.0
+storage 1 co-located + flat_tariff - Summer,5.2633864266465595,204,159.0
+both co-located + flat_tariff - Winter,5.094474606190956,215,163.0
+storage 2 co-located + dynamic_tariff - LowLoad,5.7810724380382625,325,168.0
+storage 2 co-located + flat_tariff - LowLoad,5.848255581850504,329,168.0
+storage 1 co-located + dynamic_tariff - Summer,5.128726100297377,190,169.0
+storage 2 co-located + flat_tariff - Summer,5.167099980917363,185,171.0
+both co-located + hourly_tariff - Summer,5.322057701866401,199,171.0
+storage 2 co-located + flat_tariff - Winter,5.320684965638551,219,198.0
+storage 2 co-located + dynamic_tariff - Winter,5.341206185743932,223,202.0
+baseline + flat_tariff - Summer,5.516880398564989,248,206.0
+storage 1 co-located + dynamic_tariff - LowLoad,4.9892459936051266,194,207.0
+storage 1 co-located + flat_tariff - Winter,4.742141426771925,140,235.0
+storage 1 co-located + dynamic_tariff - Winter,4.86762560540914,152,240.0
+both co-located + hourly_tariff - LowLoad,5.334967959209152,204,255.0
+storage 1 co-located + hourly_tariff - LowLoad,4.741259481396508,175,255.0
+both co-located + hourly_tariff - Winter,4.833499860196785,159,256.0
+both co-located + dynamic_tariff - Winter,4.346003184883852,146,259.0
+baseline + dynamic_tariff - LowLoad,5.124689628036262,193,264.0
+baseline + hourly_tariff - LowLoad,3.632221665828847,125,266.0
+storage 1 co-located + flat_tariff - LowLoad,4.453228226450961,164,267.0
+storage 2 co-located + hourly_tariff - LowLoad,4.0129667581909265,173,275.0
+storage 1 co-located + hourly_tariff - Winter,4.758287447643905,147,277.0
+storage 2 co-located + hourly_tariff - Winter,4.829026610182393,149,280.0
+baseline + flat_tariff - LowLoad,4.132498337906781,170,284.0
+baseline + flat_tariff - Winter,4.436624663496836,177,284.0
+baseline + dynamic_tariff - Winter,4.668151139082661,184,288.0
+baseline + hourly_tariff - Summer,3.9158903730161034,102,288.0
+baseline + hourly_tariff - Winter,4.473396532236777,161,329.0
