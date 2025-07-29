@@ -387,6 +387,7 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     n_players = len(outputs[scenario_names[0]])
     T = len(outputs[scenario_names[0]][0][3])
     TIME = range(T)
+    TIME_adjusted = range(T+1)
     
     # --- 1) Market price over time ---
     plt.figure(figsize=(15,10))
@@ -394,9 +395,9 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     for j, scen in enumerate(scenario_names):
         # Price is same across players, take player 0 for reference
         price = outputs[scen][0][3]  
-        plt.step(TIME, price, label=scen, color=scenario_colors[j], linestyle=scenario_linestyles[j])
+        plt.step(TIME_adjusted, list(price)+[price[-1]], label=scen, color=scenario_colors[j], linestyle=scenario_linestyles[j], where='post')
     plt.title("Market Price Over Time")
-    plt.xlabel("Time")
+    plt.xlabel("Hour")
     plt.ylabel("Price (€/MWh)")
     plt.legend()
     plt.grid()
@@ -406,9 +407,9 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     plt.subplot(2,2,2)
     for j, scen in enumerate(scenario_names):
         unmet = outputs[scen][0][9]
-        plt.step(TIME, unmet, label=scen, color=scenario_colors[j], linestyle=scenario_linestyles[j])
+        plt.step(TIME_adjusted, list(unmet)+[unmet[-1]], label=scen, color=scenario_colors[j], linestyle=scenario_linestyles[j], where='post')
     plt.title("Unmet Demand Over Time")
-    plt.xlabel("Time")
+    plt.xlabel("Hour")
     plt.ylabel("Unmet Demand (MW)")
     plt.legend()
     plt.grid()
@@ -430,7 +431,7 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     for i, scen in enumerate(scenario_names):
         output = outputs[scen]
         total_q_ch = [sum(output[p][0][t] for p in range(n_players)) for t in TIME]
-        plt.step(TIME, total_q_ch, where='post', label=scen, color=scenario_colors[i], linestyle=scenario_linestyles[i])
+        plt.step(TIME_adjusted, list(total_q_ch)+[total_q_ch[-1]], where='post', label=scen, color=scenario_colors[i], linestyle=scenario_linestyles[i])
 
     plt.title("Total Charging Behavior Across Scenarios")
     plt.xlabel("Hour")
@@ -486,7 +487,7 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     plt.tight_layout()
 
     if plots:
-        plt.savefig("figs_policies/tariffs_results")
+        plt.savefig("figs_policies/tariffs_results.pdf")
 
 
     # --- Other subplot: Revenue over time (aggregated over players) ---
@@ -519,7 +520,7 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     plt.tight_layout()
 
     if plots:
-        plt.savefig("figs_policies/tariffs-players_revenue")
+        plt.savefig("figs_policies/tariffs-players_revenue.pdf")
 
 
     # --- Tariffs Plots ---
