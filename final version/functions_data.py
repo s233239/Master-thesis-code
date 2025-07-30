@@ -189,7 +189,7 @@ def load_res_production_data(season:str, plots=False):
 
     # === RES PRODUCTION DATA ===
     # Path for RES production cluster data - 1, 2 or 3 clusters: assumed to be fixed
-    files_path = base_dir.parent / 'data' / 'RES' / 'csv-vf'
+    files_path = base_dir.parent / 'data' / 'RES' / 'extracted_csv-clusters'
 
     # Import the csv data files relevant for our model
     csv_files = list(files_path.glob('medoids_profile*.csv'))

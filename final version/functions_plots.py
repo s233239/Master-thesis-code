@@ -184,8 +184,8 @@ def plot_results(output, profits, diff_table, n_players, model_parameters, stora
 
     residual_demand = [max(Demand_volume[-1, t] - RES[t], 0) for t in TIME]
 
-    plt.step(temps_with_zero_np, np.append(unmet_demand, unmet_demand[-1]), where='post', label='Unmet Demand')
-    plt.step(temps_with_zero_np, np.append(residual_demand, residual_demand[-1]), where='post', color='red', linestyle='--', label='Residual Demand')
+    plt.step(temps_with_zero_np, np.append(residual_demand, residual_demand[-1]), where='post', color='red', linestyle='--', label='Before Storage')
+    plt.step(temps_with_zero_np, np.append(unmet_demand, unmet_demand[-1]), where='post', label='Post Storage')
     plt.xlabel("Time (h)")
     plt.ylabel("Power (MW)")
     # plt.title("Unmet Demand Over Time")
@@ -396,7 +396,7 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
         # Price is same across players, take player 0 for reference
         price = outputs[scen][0][3]  
         plt.step(TIME_adjusted, list(price)+[price[-1]], label=scen, color=scenario_colors[j], linestyle=scenario_linestyles[j], where='post')
-    plt.title("Market Price Over Time")
+    # plt.title("Market Price Over Time")
     plt.xlabel("Hour")
     plt.ylabel("Price (€/MWh)")
     plt.legend()
@@ -408,9 +408,9 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     for j, scen in enumerate(scenario_names):
         unmet = outputs[scen][0][9]
         plt.step(TIME_adjusted, list(unmet)+[unmet[-1]], label=scen, color=scenario_colors[j], linestyle=scenario_linestyles[j], where='post')
-    plt.title("Unmet Demand Over Time")
+    # plt.title("Unmet Demand Over Time")
     plt.xlabel("Hour")
-    plt.ylabel("Unmet Demand (MW)")
+    plt.ylabel("Power (MW)")
     plt.legend()
     plt.grid()
 
@@ -433,9 +433,9 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
         total_q_ch = [sum(output[p][0][t] for p in range(n_players)) for t in TIME]
         plt.step(TIME_adjusted, list(total_q_ch)+[total_q_ch[-1]], where='post', label=scen, color=scenario_colors[i], linestyle=scenario_linestyles[i])
 
-    plt.title("Total Charging Behavior Across Scenarios")
+    # plt.title("Total Charging Behavior Across Scenarios")
     plt.xlabel("Hour")
-    plt.ylabel("Charging Power [MW]")
+    plt.ylabel("Charging Power (MW)")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
@@ -481,7 +481,7 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
     plt.xticks(x + bar_width * (n_scenarios - 1) / 2, [f'Player {p+1}' for p in range(n_players)])
     plt.ylabel("Total Profit (€)")
     plt.ylim(top=1.1*np.max(profits_matrix))
-    plt.title("Player Profits by Scenario")
+    # plt.title("Player Profits by Scenario")
     plt.grid(axis='y')
 
     plt.tight_layout()
@@ -507,9 +507,9 @@ def plot_scenarios_analysis(outputs, model_parameters=None, plots=False):
         plt.bar(x_offset, tariff_addon, width=bar_width, bottom=base_revenue, 
                 label=f"{scen} Tariff", hatch='//', color='gray', edgecolor='black')
 
-    plt.xlabel("Time (Hour)")
+    plt.xlabel("Time (h)")
     plt.ylabel("Revenue (€)")
-    plt.title("Scenario Comparison: Revenue and Tariff Component per Hour")
+    # plt.title("Scenario Comparison: Revenue and Tariff Component per Hour")
     plt.xticks(x, [str(t) for t in TIME])
     plt.grid(True, axis='y', linestyle='--', alpha=0.6)
 
