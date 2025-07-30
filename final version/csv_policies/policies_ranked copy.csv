@@ -1,0 +1,17 @@
+Policy,Normalized Sum,Dominance Score,Rank Score
+baseline - Winter,5.213628306118007,193,135.0
+baseline - Summer,5.213628306118007,193,135.0
+baseline - LowLoad,5.213628306118007,193,135.0
+reserve_policy - LowLoad,8.056926313510775,329,135.0
+storage 1 co-located + hourly_tariff - Summer,4.9481362489131415,190,137.0
+storage 2 co-located + hourly_tariff - Summer,5.038943923870303,176,140.0
+both co-located + dynamic_tariff - Summer,5.2633864266465595,204,159.0
+storage 1 co-located + flat_tariff - Summer,5.2633864266465595,204,159.0
+both co-located + flat_tariff - Winter,5.094474606190956,215,163.0
+storage 2 co-located + dynamic_tariff - LowLoad,5.7810724380382625,325,168.0
+storage 2 co-located + flat_tariff - LowLoad,5.848255581850504,329,168.0
+baseline + flat_tariff - Summer,5.516880398564989,248,206.0
+storage 1 co-located + dynamic_tariff - LowLoad,4.9892459936051266,194,207.0
+both co-located + hourly_tariff - LowLoad,5.334967959209152,204,255.0
+baseline + dynamic_tariff - LowLoad,5.124689628036262,193,264.0
+baseline + hourly_tariff - Winter,4.473396532236777,161,329.0

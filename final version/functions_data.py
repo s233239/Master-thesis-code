@@ -4,6 +4,7 @@ Functions to load renewable energy production and price-demand curve data for on
 Includes:
 - load_res_production_data: computes hourly RES production profiles.
 - load_price_demand_curve_data: loads demand price and volume curves.
+- load_storage_data: computes storage sizing for multiple players.
 """
 
 import pandas as pd
@@ -13,7 +14,7 @@ import matplotlib.pyplot as plt
 
 
 # === INITIALIZATION FUNCTIONS FOR OUR MODEL ===
-def load_price_demand_curve_data(bidding_zone:str, time_period:str, demand_step_numbers=20, plots=False, plot_hours = [0,6,12,18]):
+def load_price_demand_curve_data(bidding_zone:str, time_period:str, demand_step_numbers=20, plots=False, hour_to_plot = 14):
     """
     Load demand price and volume data for a specific bidding zone and time period.
 
@@ -81,64 +82,87 @@ def load_price_demand_curve_data(bidding_zone:str, time_period:str, demand_step_
     # Extract the demand data for the modelled scenario
     scenario_label = bidding_zone + time_period
 
-    Demand_Price = demand_price[scenario_label]
-    Demand_Volume = demand_volume[scenario_label]
+    Demand_Price = demand_price[scenario_label].to_numpy()
+    Demand_Volume = demand_volume[scenario_label].to_numpy()
+
+    # Scaled up to 2030 projections
+    scaling_factor = 1.85
+    Demand_Volume = scaling_factor * Demand_Volume
 
 
     if plots:
         # === DATA PLOTS ===
+        scenario_names = ["Winter", "Summer", "LowLoad"]
         scenario_colors = {"Winter": "blue", "Summer": "orange", "LowLoad": "purple"}
         bidding_zone_to_plot = bidding_zone
 
         # Plot the price demand curve for some hours
-        plt.subplots(2, 2, figsize=(12, 6))
-        hours_to_plot = plot_hours
+        fig, axs = plt.subplots(1,2,figsize=(7, 3))
 
-        for hour in hours_to_plot:
-            plt.subplot(2, 2, hours_to_plot.index(hour)+1)
-            for scenario_to_plot in ["Winter", "Summer", "LowLoad"]:
-                scenario_label_to_plot = bidding_zone_to_plot + scenario_to_plot
-                x = demand_volume[scenario_label_to_plot][f'{hour}'].to_numpy()
-                y = demand_price[scenario_label_to_plot][f'{hour}'].to_numpy()
-
-                # Plot
-                plt.step(np.insert(x, 0, 0), np.insert(y, 0, 4000), label=f'{scenario_to_plot}', color=scenario_colors[scenario_to_plot])
-
-            plt.xlabel('Cumulative Volume (MW)')
-            plt.ylabel('Price (€/MWh)')
-            plt.axhline(y=0, color="black", linewidth=0.8)
-            plt.title(f'Price Demand Curve of Scenarios at {hour:02}:00')
-            plt.grid(True)
-            plt.legend()
-        
-        plt.tight_layout()
-        # plt.savefig("price_demand_curves_fulldata.png")
-
-        # Plot the demand over time in the day
-        plt.figure(figsize=(12, 6))
-
-        for scenario_to_plot in ["Winter", "Summer", "LowLoad"]:
+        # Plot the complete price demand curve
+        ax = axs[0]
+        for scenario_to_plot in scenario_names:
             scenario_label_to_plot = bidding_zone_to_plot + scenario_to_plot
-            inflexible_demand = demand_volume[scenario_label_to_plot].loc[0].to_numpy()     # First row (Price == 4000)
-            total_demand = demand_volume[scenario_label_to_plot].loc[N-1].to_numpy()        # Last row (Accumulated volume)
+            x = demand_volume[scenario_label_to_plot][f'{hour_to_plot}'].to_numpy() * scaling_factor
+            y = demand_price[scenario_label_to_plot][f'{hour_to_plot}'].to_numpy()
 
             # Plot
-            plt.plot(range(24), inflexible_demand, label=f"{scenario_to_plot} Inflexible Demand", linestyle='--', color=scenario_colors[scenario_to_plot])
-            plt.plot(range(24), total_demand, label=f"{scenario_to_plot} Total Demand", color=scenario_colors[scenario_to_plot])
+            ax.step(np.insert(x,0,0), np.insert(y,0,4000), where='post', label=f'{scenario_to_plot}', color=scenario_colors[scenario_to_plot])
 
-        plt.xlabel('Time (h)')
-        plt.ylabel('Volume (MW)')
-        plt.ylim(bottom=0)
-        plt.title(f'Demand Over Time for Scenarios')
-        plt.grid(True)
-        plt.legend()
+        ax.set_xlabel('Cumulative Volume (MW)')
+        ax.set_ylabel('Price (€/MWh)')
+        ax.axhline(y=0, color="black", linewidth=0.8)
+        ax.set_title(f'DPQC at {hour_to_plot:02}:00')
+        ax.grid(True)
+        ax.legend(loc="upper right")
+
+        # Zoomed in without considering inflexible demand
+        ax = axs[1]
+        for scenario_to_plot in scenario_names:
+            scenario_label_to_plot = bidding_zone_to_plot + scenario_to_plot
+            x = demand_volume[scenario_label_to_plot][f'{hour_to_plot}'].to_numpy() * scaling_factor
+            y = demand_price[scenario_label_to_plot][f'{hour_to_plot}'].to_numpy()
+
+            # Plot
+            ax.step(np.insert(x,0,0), np.insert(y,0,4000), where='post', label=f'{scenario_to_plot}', color=scenario_colors[scenario_to_plot])
+
+        ax.set_xlabel('Cumulative Volume (MW)')
+        # ax.set_ylabel('Price (€/MWh)')
+        bottom, top = ax.set_ylim()
+        ax.set_ylim(bottom=0.1*bottom, top=350)
+        ax.axhline(y=0, color="black", linewidth=0.8)
+        ax.set_title(f'Zoomed-in at hour {hour_to_plot:02}:00')
+        ax.grid(True)
+        # ax.legend()
+        
         plt.tight_layout()
-        # plt.show()
-        # plt.savefig("demand_over_time_fulldata.png")
+        plt.savefig("price_demand_curves_fulldata.pdf")
+
+        # Plot the demand over time in the day
+        fig, axs = plt.subplots(1,3,figsize=(9, 4), sharey=True)
+
+        for scenario_to_plot in scenario_names:
+            scenario_label_to_plot = bidding_zone_to_plot + scenario_to_plot
+            inflexible_demand = demand_volume[scenario_label_to_plot].loc[0].to_numpy()  * scaling_factor     # First row (Price == 4000)
+            total_demand = demand_volume[scenario_label_to_plot].loc[N-1].to_numpy()  * scaling_factor        # Last row (Accumulated volume)
+            ax = axs[scenario_names.index(scenario_to_plot)]
+
+            # Plot
+            ax.plot(range(24), inflexible_demand/1000, label=f"Inflexible Demand", linestyle='--', color=scenario_colors[scenario_to_plot])
+            ax.plot(range(24), total_demand/1000, label=f"Total Demand", color=scenario_colors[scenario_to_plot])
+            ax.set_xlabel('Time (h)')
+            if scenario_names.index(scenario_to_plot) == 0:
+                ax.set_ylabel('Volume (GW)')
+            ax.set_ylim(bottom=0)
+            ax.set_title(f'{scenario_to_plot}')
+            ax.grid(True)
+            ax.legend(loc='lower left')
+
+        plt.tight_layout()
+        plt.savefig("demand_over_time_fulldata.pdf")
 
 
-    return Demand_Price.to_numpy(), Demand_Volume.to_numpy()
-
+    return Demand_Price, Demand_Volume
 
 def load_res_production_data(season:str, plots=False):
     """
@@ -165,7 +189,7 @@ def load_res_production_data(season:str, plots=False):
 
     # === RES PRODUCTION DATA ===
     # Path for RES production cluster data - 1, 2 or 3 clusters: assumed to be fixed
-    files_path = base_dir.parent / 'data' / 'RES' / 'csv--data_processing-v4'
+    files_path = base_dir.parent / 'data' / 'RES' / 'extracted_csv-clusters'
 
     # Import the csv data files relevant for our model
     csv_files = list(files_path.glob('medoids_profile*.csv'))
@@ -176,26 +200,26 @@ def load_res_production_data(season:str, plots=False):
     medoids_profile_average = cluster_files["medoids_profile_summary--1cluster.csv"][[f"{h}" for h in range(24)]]
 
     # Compute RES hourly capacity factors - higher probability cluster is chosen (or in some cases of similar probability, the more relevant) - see clusters diagnostic
-    offshore_profile_winter = medoids_profile.iloc[1].to_numpy() * 0.8
+    # offshore_profile_winter = medoids_profile.iloc[1].to_numpy()
     # offshore_profile_summer = medoids_profile.iloc[2].to_numpy()
-    # offshore_profile_winter = medoids_profile_average.iloc[0].to_numpy()
+    offshore_profile_winter = medoids_profile_average.iloc[0].to_numpy()
     offshore_profile_summer = medoids_profile_average.iloc[1].to_numpy()
 
     # onshore_profile_winter = medoids_profile.iloc[5].to_numpy()
     # onshore_profile_summer = medoids_profile.iloc[7].to_numpy()
-    onshore_profile_winter = medoids_profile_average.iloc[2].to_numpy() * 1.1
+    onshore_profile_winter = medoids_profile_average.iloc[2].to_numpy()
     onshore_profile_summer = medoids_profile_average.iloc[3].to_numpy()
 
     # solar_profile_winter = medoids_profile.iloc[9].to_numpy()
-    solar_profile_summer = medoids_profile.iloc[10].to_numpy() * 0.9
+    # solar_profile_summer = medoids_profile.iloc[10].to_numpy()
     solar_profile_winter = medoids_profile_average.iloc[4].to_numpy()
-    # solar_profile_summer = medoids_profile_average.iloc[5].to_numpy()
+    solar_profile_summer = medoids_profile_average.iloc[5].to_numpy()
 
     # Energy mix: capacity installation plans for 2030 (IEA)
-    offshore_capacity = 7200
-    onshore_capacity = 5500
-    solar_capacity = 5265
-    bioenergy_capacity = 557
+    offshore_capacity = 18e3
+    onshore_capacity = 9e3
+    solar_capacity = 12e3
+    bioenergy_capacity = 0
 
 
     # Compute RES hourly production = RES cf * installed capacity
@@ -213,7 +237,7 @@ def load_res_production_data(season:str, plots=False):
 
     if plots:
         # === DATA PLOTS ===
-        plt.figure(figsize=(10, 6))
+        plt.subplots(1,2,figsize=(8, 4), sharey=True)
         temps = range(24)
 
         # plt.plot(temps, RES_winter, label="RES in winter")
@@ -225,38 +249,37 @@ def load_res_production_data(season:str, plots=False):
         # plt.grid()
 
         plt.subplot(1,2,1)
-        plt.bar(x=temps, height=bioenergy_capacity, color='gray', align='edge', label="Bioenergy")
-        plt.bar(x=temps, height=offshore_profile_winter*offshore_capacity, bottom=bioenergy_capacity, color='darkblue', align='edge', label="Offshore wind")
-        plt.bar(x=temps, height=onshore_profile_winter*onshore_capacity, bottom=bioenergy_capacity+offshore_profile_winter*offshore_capacity, color='lightskyblue', align='edge', label="Onshore wind")
-        plt.bar(x=temps, height=solar_profile_winter*solar_capacity, bottom=bioenergy_capacity+offshore_profile_winter*offshore_capacity+onshore_profile_winter*onshore_capacity, color='orange', align='edge', label="Solar")
-        plt.plot(temps, RES_winter, label="RES in winter", linestyle='--', color='black')
-        plt.plot(temps, RES_summer, label="RES in summer", linestyle='--', color='gray')
+        # plt.bar(x=temps, height=bioenergy_capacity, color='gray', align='edge', label="Bioenergy")
+        plt.bar(x=temps, height=offshore_profile_winter*offshore_capacity/1000, bottom=bioenergy_capacity/1000, color='darkblue', align='edge', label="Offshore wind")
+        plt.bar(x=temps, height=onshore_profile_winter*onshore_capacity/1000, bottom=(bioenergy_capacity+offshore_profile_winter*offshore_capacity)/1000, color='lightskyblue', align='edge', label="Onshore wind")
+        plt.bar(x=temps, height=solar_profile_winter*solar_capacity/1000, bottom=(bioenergy_capacity+offshore_profile_winter*offshore_capacity+onshore_profile_winter*onshore_capacity)/1000, color='orange', align='edge', label="Solar")
+        # plt.plot(temps, RES_winter, label="RES in winter", linestyle='--', color='black')
+        # plt.plot(temps, RES_summer, label="RES in summer", linestyle='--', color='gray')
         plt.xlabel("Hour (h)")
-        plt.ylabel("Power (MW)")
-        plt.title("Renewable Hourly Production Mix in Winter")
-        plt.legend(loc="upper right")
+        plt.ylabel("Power (GW)")
+        plt.title("Mix in Winter")
+        # plt.legend(loc="lower left")
 
         plt.subplot(1,2,2)
-        plt.bar(x=temps, height=bioenergy_capacity, color='gray', align='edge', label="Bioenergy")
-        plt.bar(x=temps, height=offshore_profile_summer*offshore_capacity, bottom=bioenergy_capacity, color='darkblue', align='edge', label="Offshore wind")
-        plt.bar(x=temps, height=onshore_profile_summer*onshore_capacity, bottom=bioenergy_capacity+offshore_profile_summer*offshore_capacity, color='lightskyblue', align='edge', label="Onshore wind")
-        plt.bar(x=temps, height=solar_profile_summer*solar_capacity, bottom=bioenergy_capacity+offshore_profile_summer*offshore_capacity+onshore_profile_summer*onshore_capacity, color='orange', align='edge', label="Solar")
-        plt.plot(temps, RES_winter, label="RES in winter", linestyle='--', color='black')
-        plt.plot(temps, RES_summer, label="RES in summer", linestyle='--', color='gray')
+        # plt.bar(x=temps, height=bioenergy_capacity, color='gray', align='edge', label="Bioenergy")
+        plt.bar(x=temps, height=offshore_profile_summer*offshore_capacity/1000, bottom=bioenergy_capacity/1000, color='darkblue', align='edge', label="Offshore wind")
+        plt.bar(x=temps, height=onshore_profile_summer*onshore_capacity/1000, bottom=(bioenergy_capacity+offshore_profile_summer*offshore_capacity)/1000, color='lightskyblue', align='edge', label="Onshore wind")
+        plt.bar(x=temps, height=solar_profile_summer*solar_capacity/1000, bottom=(bioenergy_capacity+offshore_profile_summer*offshore_capacity+onshore_profile_summer*onshore_capacity)/1000, color='orange', align='edge', label="Solar")
+        # plt.plot(temps, RES_winter, label="RES in winter", linestyle='--', color='black')
+        # plt.plot(temps, RES_summer, label="RES in summer", linestyle='--', color='gray')
         plt.xlabel("Hour (h)")
-        plt.ylabel("Power (MW)")
-        plt.title("Renewable Hourly Production Mix in Summer")
-        plt.legend(loc="upper right")
+        plt.title("Mix in Summer")
+        plt.legend(loc="upper left")
 
         plt.tight_layout()
-        # plt.savefig("RES_production_mix-fulldata.png")
+        plt.savefig("RES_production_mix-fulldata.pdf")
         # plt.show()
 
 
     return RES
 
-
 def load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_default, N,
+                      storage_capacity=None,
                       plots=False, bidding_zone=None, season=None):
     """
     Compute storage sizing for multiple players based on residual demand.
@@ -296,6 +319,8 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_de
 
     # Minimum total amount of energy the battery must store to satisfy the demand at any time step > informs E_max
     Capacity_req = int(np.ceil(np.max(Local_cumul)))  # MWh total required
+    if storage_capacity:
+        Capacity_req = storage_capacity*Capacity_req
 
     # Minimum instantaneous power the storage system need to have to satisfy the demand at any time step > informs Q_max
     # PowerRating_req = np.max(np.abs(Residual_corrected))    
@@ -317,6 +342,8 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_de
         size_stor = [0.05, 0.1, 0.1, 0.15, 0.25, 0.35]
     elif n_players == 8:
         size_stor = [0.05, 0.05, 0.1, 0.1, 0.1, 0.15, 0.2, 0.25]
+    elif n_players == 0:
+        print(f"Distribution of storage capacity is not defined.")
     else:
         raise ValueError(f"Distribution of storage capacity is not defined for n_players={n_players}")
 
@@ -343,38 +370,60 @@ def load_storage_data(Residual, n_players, min_eta, storage_Crate_default, OC_de
         if bidding_zone is None or season is None:
             raise ValueError("bidding_zone and season must be provided if plots=True")
 
-        fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+        # fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
         x = range(len(Residual))
 
         # Plot 1: Residual and Residual Corrected
-        axs[0].bar(x, Residual_corrected, color='tab:orange',
+        fig0, ax0 = plt.subplots(figsize=(8, 4))
+        ax0.bar(x, Residual_corrected, color='tab:orange',
                    label='Residual Corrected (inefficiency)', align='edge')
-        axs[0].bar(x, Residual, color='tab:blue',
+        ax0.bar(x, Residual, color='tab:blue',
                    label='Residual (Demand - RES)', align='edge')
-        axs[0].axhline(PowerRating_available, color='tab:red', linestyle='--',
+        ax0.axhline(PowerRating_available, color='tab:red', linestyle='--',
                        label='[max] Available Storage Power (MW)')
-        axs[0].axhline(0, color='black', linestyle='--', linewidth=0.8)
-        axs[0].set_title('Residual Demand vs Corrected Residual')
-        axs[0].set_ylabel('Power [MW]')
-        axs[0].legend()
-        axs[0].grid(True)
+        ax0.axhline(0, color='black', linestyle='--', linewidth=0.8)
+        ax0.set_title('Residual Demand vs Corrected Residual')
+        ax0.set_ylabel('Power [MW]')
+        ax0.legend()
+        ax0.grid(True)
+        fig0.tight_layout()
 
         # Plot 2: Cumulative and Local Cumulative
-        axs[1].plot(Cummul_res_corr, label='Cumulative Residual Corrected',
-                    color='tab:green', marker='.')
-        axs[1].plot(Local_cumul, label='Local Cumulative (Storage Level)',
-                    color='tab:red', marker='.')
-        axs[1].axhline(Capacity_req, color='tab:orange', linestyle='--',
-                       label='Required Energy Capacity (MWh)')
-        axs[1].axhline(0, color='black', linestyle='--', linewidth=0.8)
-        axs[1].set_title('Cumulative Imbalance and Virtual Storage Level')
-        axs[1].set_xlabel('Hour')
-        axs[1].set_ylabel('Energy [MWh]')
-        axs[1].legend()
-        axs[1].grid(True)
+        fig1, ax1 = plt.subplots(figsize=(8, 4))
+        ax1.bar(x, Residual_corrected/1000, color='blue',
+                   label='Residual Corrected (efficiency-adjusted)', align='edge')
+        ax1.bar(x, Residual/1000, color='lightskyblue',
+                   label='Residual (Demand - RES)', align='edge')
+        ax1.plot(Local_cumul/1000, label='Local Cumulative (Storage Level)',
+                    color='green', marker='.')
+        ax1.plot(Cummul_res_corr/1000, label='Cumulative Residual Corrected',
+                    color='blue', marker='.')
+        ax1.axhline(Capacity_req/1000, color='red', linestyle='--', linewidth=2,
+                       label='Required Energy Capacity')
+        ax1.axhline(0, color='black', linestyle='--', linewidth=0.8)
+        # ax1.set_title('Cumulative Imbalance and Virtual Storage Level')
+        ax1.set_xlabel('Hour')
+        ax1.set_ylabel('Energy [GWh]')
 
-        plt.tight_layout()
-        # plt.savefig(f"{bidding_zone+season}-storage_characteristics.png")
+        # Get handles and labels
+        handles, labels = plt.gca().get_legend_handles_labels()
+
+        # Create a dictionary and sort it as desired
+        label_order = ['Residual (Demand - RES)', 
+                       'Residual Corrected (efficiency-adjusted)',
+                       'Cumulative Residual Corrected',
+                       'Local Cumulative (Storage Level)',
+                       'Required Energy Capacity']
+        sorted_handles_labels = sorted(zip(handles, labels), key=lambda x: label_order.index(x[1]))
+
+        # Unzip and pass to legend
+        sorted_handles, sorted_labels = zip(*sorted_handles_labels)
+        ax1.legend(sorted_handles, sorted_labels)
+
+        ax1.grid(True)
+        fig1.tight_layout()
+        fig1.savefig(f"{season}-storage_capacity.pdf")
+
 
     return OC_all, Eta_all, E_max_all, Q_max_all, Q_all
 
